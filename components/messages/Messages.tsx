@@ -2,20 +2,71 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Modal,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, ActionSheetIOS, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
-  fetchChats, fetchMessages, sendMessage, createChat,
+  fetchChats, fetchMessages, sendMessage, createChat, deleteMessage, editMessage,
   connectSocket, disconnectSocket,
 } from '@/store/slices/chat';
 import { fetchTeamMembers } from '@/store/slices/teams';
-import { setActiveChatId, updateMessageText } from '@/store/reducers/chat';
+import { setActiveChatId, setMessageText, setMessageReplyTo, setEditedMessage, resetMessage } from '@/store/reducers/chat';
 import { EmptyState, Loader, SectionHeader } from '@/components/shared';
 import { COLORS, SIZES } from '@/constants/theme';
-import { Chat, ChatMessage, TeamMember } from '@/types';
+import { Chat, ChatMessage, TeamMember, ChatFilters } from '@/types';
+
+// Presents Reply/Edit/Delete on a long-pressed message bubble, cross-platform.
+const showMessageActions = (options: { onReply: () => void; onEdit?: () => void; onDelete?: () => void }) => {
+  const labels = ['Reply'];
+  if (options.onEdit) labels.push('Edit');
+  if (options.onDelete) labels.push('Delete');
+  labels.push('Cancel');
+
+  const handlers = [options.onReply, options.onEdit, options.onDelete].filter(Boolean) as Array<() => void>;
+
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: labels,
+        cancelButtonIndex: labels.length - 1,
+        destructiveButtonIndex: options.onDelete ? labels.length - 2 : undefined,
+      },
+      (index) => {
+        if (index < handlers.length) handlers[index]();
+      }
+    );
+  } else {
+    Alert.alert('Message', undefined, [
+      { text: 'Reply', onPress: options.onReply },
+      ...(options.onEdit ? [{ text: 'Edit', onPress: options.onEdit }] : []),
+      ...(options.onDelete ? [{ text: 'Delete', onPress: options.onDelete, style: 'destructive' as const }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
+};
+
+// Bolds "@Name" occurrences flagged in message.mentions so pings stand out in the bubble.
+const MessageText = ({ item, style }: { item: ChatMessage; style: any }) => {
+  if (!item.mentions?.length || !item.text) return <Text style={style}>{item.text}</Text>;
+
+  const parts: React.ReactNode[] = [];
+  let remaining = item.text;
+  let key = 0;
+
+  item.mentions.forEach((mention) => {
+    const token = `@${mention.text}`;
+    const idx = remaining.indexOf(token);
+    if (idx === -1) return;
+    if (idx > 0) parts.push(<Text key={key++}>{remaining.slice(0, idx)}</Text>);
+    parts.push(<Text key={key++} style={styles.mentionText}>{token}</Text>);
+    remaining = remaining.slice(idx + token.length);
+  });
+  parts.push(<Text key={key++}>{remaining}</Text>);
+
+  return <Text style={style}>{parts}</Text>;
+};
 
 // ─── Helpers ──────────────────────────────────────────────
 const formatTime = (iso: string) => {
@@ -232,9 +283,16 @@ const NewConversationModal = ({
 };
 
 // ─── Chat List ─────────────────────────────────────────────
+const FILTER_TABS: { label: string; value: ChatFilters | 'all' }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Direct', value: ChatFilters.DIRECT_MESSAGE },
+  { label: 'Rooms', value: ChatFilters.ROOM },
+  { label: 'Unread', value: ChatFilters.UNREAD },
+];
+
 export const ChatList = () => {
   const dispatch = useAppDispatch();
-  const { chats } = useAppSelector((s) => s.chat);
+  const { chats, activeChatsFilter } = useAppSelector((s) => s.chat);
   const { user } = useAppSelector((s) => s.account);
   const { pending } = useAppSelector((s) => s.asyncActions.fetchChats);
   const [showModal, setShowModal] = useState(false);
@@ -246,10 +304,14 @@ export const ChatList = () => {
   });
 
   useEffect(() => {
-    dispatch(fetchChats() as any);
+    dispatch(fetchChats(ChatFilters.ALL) as any);
     dispatch(connectSocket() as any);
     return () => { dispatch(disconnectSocket() as any); };
   }, []);
+
+  const onSelectFilter = (filter: ChatFilters | 'all') => {
+    dispatch(fetchChats(filter === 'all' ? ChatFilters.ALL : filter) as any);
+  };
 
   const getOtherParticipant = (chat: Chat) =>
     chat.participants?.find((p) => p.id !== user?.id) ?? chat.participants?.[0];
@@ -264,12 +326,30 @@ export const ChatList = () => {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <Text style={styles.listTitle}>Messages</Text>
-            <TouchableOpacity onPress={() => setShowModal(true)} style={styles.newBtn}>
-              <Ionicons name="create-outline" size={22} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
+          <>
+            <View style={styles.listHeader}>
+              <Text style={styles.listTitle}>Messages</Text>
+              <TouchableOpacity onPress={() => setShowModal(true)} style={styles.newBtn}>
+                <Ionicons name="create-outline" size={22} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+              {FILTER_TABS.map((tab) => {
+                const isActive = (activeChatsFilter ?? 'all') === tab.value;
+                return (
+                  <TouchableOpacity
+                    key={tab.value}
+                    onPress={() => onSelectFilter(tab.value)}
+                    style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  >
+                    <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
         }
         ListEmptyComponent={
           <EmptyState
@@ -283,7 +363,8 @@ export const ChatList = () => {
           const other = isGroup ? null : getOtherParticipant(item);
           const name = item.room?.name ?? other?.name ?? 'Unknown';
           const lastMsg = item.last_message;
-          const isUnread = lastMsg && lastMsg.status !== 'read';
+          const unreadCount = item.unread_count ?? 0;
+          const isUnread = unreadCount > 0;
 
           return (
             <TouchableOpacity
@@ -312,10 +393,14 @@ export const ChatList = () => {
                     )}
                   </View>
                   <Text style={[styles.lastMessage, isUnread && styles.lastMessageUnread]} numberOfLines={1}>
-                    {lastMsg?.text ?? 'No messages yet'}
+                    {lastMsg?.is_deleted ? 'This message was deleted' : (lastMsg?.text ?? 'No messages yet')}
                   </Text>
                 </View>
-                {isUnread && <View style={styles.unreadDot} />}
+                {isUnread && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  </View>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -331,24 +416,65 @@ export const ChatList = () => {
 export const ChatRoom = ({ chatId }: { chatId: string }) => {
   const dispatch = useAppDispatch();
   const flatListRef = useRef<FlatList>(null);
-  const { chats, message } = useAppSelector((s) => s.chat);
+  const { chats, message, editedMessage } = useAppSelector((s) => s.chat);
   const { user } = useAppSelector((s) => s.account);
   const { pending } = useAppSelector((s) => s.asyncActions.sendMessage);
   const { pending: loadingMessages } = useAppSelector((s) => s.asyncActions.fetchMessages);
   const chat = chats[chatId];
+  const isEditing = !!editedMessage;
 
   useEffect(() => {
     if (chatId) dispatch(fetchMessages(chatId) as any);
+    return () => { dispatch(resetMessage()); };
   }, [chatId]);
 
   const handleSend = () => {
     if (!chat || !message.text?.trim()) return;
-    dispatch(sendMessage(chat, message.text) as any);
+
+    if (isEditing && editedMessage) {
+      dispatch(editMessage(editedMessage, message.text) as any);
+      return;
+    }
+
+    dispatch(sendMessage(chat, message.text, message.reply_to, message.mentions ?? []) as any);
+  };
+
+  const handleReply = (item: ChatMessage) => {
+    const senderName = chat?.participants?.find((p) => p.id === item.member_id)?.name ?? 'Someone';
+    dispatch(setMessageReplyTo({
+      message_id: item.id,
+      member_id: item.member_id,
+      sender_name: senderName,
+      text: item.text,
+    }));
+  };
+
+  const handleEdit = (item: ChatMessage) => {
+    // setEditedMessage loads the full message (including text) into
+    // state.message so the input below pre-fills with the original text.
+    dispatch(setEditedMessage(item));
+  };
+
+  const handleDelete = (item: ChatMessage) => {
+    Alert.alert('Delete message', 'This can\'t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteMessage(item) as any) },
+    ]);
   };
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isMe = item.member_id === user?.id;
     const senderName = chat?.participants?.find((p) => p.id === item.member_id)?.name;
+
+    if (item.is_deleted) {
+      return (
+        <View style={[styles.msgWrapper, isMe && styles.msgWrapperRight]}>
+          <View style={[styles.bubble, styles.bubbleDeleted]}>
+            <Text style={styles.bubbleDeletedText}>This message was deleted</Text>
+          </View>
+        </View>
+      );
+    }
 
     return (
       <View style={[styles.msgWrapper, isMe && styles.msgWrapperRight]}>
@@ -359,17 +485,38 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
             </Text>
           </View>
         )}
-        <View style={[styles.bubble, isMe ? styles.bubbleMine : styles.bubbleTheirs]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onLongPress={() => showMessageActions({
+            onReply: () => handleReply(item),
+            onEdit: isMe ? () => handleEdit(item) : undefined,
+            onDelete: isMe ? () => handleDelete(item) : undefined,
+          })}
+          style={[styles.bubble, isMe ? styles.bubbleMine : styles.bubbleTheirs]}
+        >
           {!isMe && chat?.room && (
             <Text style={styles.senderName}>{senderName}</Text>
           )}
-          <Text style={[styles.bubbleText, isMe && styles.bubbleTextMine]}>
-            {item.text}
-          </Text>
-          <Text style={[styles.bubbleTime, isMe && styles.bubbleTimeMine]}>
-            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-        </View>
+          {item.reply_to && (
+            <View style={[styles.replyPreview, isMe && styles.replyPreviewMine]}>
+              <Text style={[styles.replyPreviewName, isMe && styles.replyPreviewNameMine]} numberOfLines={1}>
+                {item.reply_to.sender_name}
+              </Text>
+              <Text style={[styles.replyPreviewText, isMe && styles.replyPreviewTextMine]} numberOfLines={1}>
+                {item.reply_to.text ?? 'Attachment'}
+              </Text>
+            </View>
+          )}
+          <MessageText item={item} style={[styles.bubbleText, isMe && styles.bubbleTextMine]} />
+          <View style={styles.bubbleFooter}>
+            {item.edited_at && (
+              <Text style={[styles.editedLabel, isMe && styles.bubbleTimeMine]}>edited · </Text>
+            )}
+            <Text style={[styles.bubbleTime, isMe && styles.bubbleTimeMine]}>
+              {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -395,13 +542,29 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
         renderItem={renderMessage}
       />
 
+      {(message.reply_to || isEditing) && (
+        <View style={styles.composerContextBar}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.composerContextLabel}>
+              {isEditing ? 'Editing message' : `Replying to ${message.reply_to?.sender_name}`}
+            </Text>
+            {!isEditing && (
+              <Text style={styles.composerContextText} numberOfLines={1}>{message.reply_to?.text}</Text>
+            )}
+          </View>
+          <TouchableOpacity onPress={() => dispatch(resetMessage())} style={{ padding: SIZES.xs }}>
+            <Ionicons name="close" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.inputBar}>
         <TextInput
           style={styles.chatInput}
           placeholder="Type a message..."
           placeholderTextColor={COLORS.textMuted}
           value={message.text ?? ''}
-          onChangeText={(v) => dispatch(updateMessageText(v))}
+          onChangeText={(v) => dispatch(setMessageText(v))}
           multiline
           maxLength={1000}
         />
@@ -412,7 +575,7 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
         >
           {pending
             ? <ActivityIndicator size="small" color={COLORS.white} />
-            : <Ionicons name="send" size={18} color={COLORS.white} />}
+            : <Ionicons name={isEditing ? 'checkmark' : 'send'} size={18} color={COLORS.white} />}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -450,7 +613,19 @@ const styles = StyleSheet.create({
   chatTime: { color: COLORS.textMuted, fontSize: SIZES.caption },
   lastMessage: { color: COLORS.textSecondary, fontSize: SIZES.small },
   lastMessageUnread: { color: COLORS.textPrimary, fontWeight: '600' },
-  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.primary },
+  unreadBadge: {
+    minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 6,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  unreadBadgeText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
+  filterRow: { paddingHorizontal: SIZES.md, paddingVertical: SIZES.sm, flexGrow: 0 },
+  filterChip: {
+    paddingHorizontal: SIZES.md, paddingVertical: 6, borderRadius: SIZES.radiusFull,
+    borderWidth: 1, borderColor: COLORS.border, marginRight: SIZES.xs,
+  },
+  filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipText: { color: COLORS.textMuted, fontSize: SIZES.small, fontWeight: '600' },
+  filterChipTextActive: { color: COLORS.white },
 
   // Modal
   modalContainer: { flex: 1, backgroundColor: COLORS.background },
@@ -526,8 +701,31 @@ const styles = StyleSheet.create({
   senderName: { color: COLORS.primary, fontSize: SIZES.caption, fontWeight: '700', marginBottom: 2 },
   bubbleText: { color: COLORS.textPrimary, fontSize: SIZES.body, lineHeight: 22 },
   bubbleTextMine: { color: COLORS.white },
-  bubbleTime: { color: COLORS.textMuted, fontSize: 10, marginTop: 3, textAlign: 'right' },
+  bubbleFooter: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 3 },
+  bubbleTime: { color: COLORS.textMuted, fontSize: 10, textAlign: 'right' },
   bubbleTimeMine: { color: 'rgba(255,255,255,0.65)' },
+  editedLabel: { color: COLORS.textMuted, fontSize: 10, fontStyle: 'italic' },
+  bubbleDeleted: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border },
+  bubbleDeletedText: { color: COLORS.textMuted, fontSize: SIZES.small, fontStyle: 'italic' },
+  mentionText: { fontWeight: '700', color: COLORS.warning },
+  replyPreview: {
+    borderLeftWidth: 3, borderLeftColor: COLORS.primary,
+    backgroundColor: COLORS.background + '33', borderRadius: SIZES.radiusSm,
+    paddingHorizontal: SIZES.sm, paddingVertical: 4, marginBottom: SIZES.xs,
+  },
+  replyPreviewMine: { borderLeftColor: COLORS.white, backgroundColor: 'rgba(255,255,255,0.15)' },
+  replyPreviewName: { color: COLORS.primary, fontSize: 11, fontWeight: '700' },
+  replyPreviewNameMine: { color: COLORS.white },
+  replyPreviewText: { color: COLORS.textMuted, fontSize: 11 },
+  replyPreviewTextMine: { color: 'rgba(255,255,255,0.8)' },
+  composerContextBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: SIZES.md, paddingVertical: SIZES.xs,
+    backgroundColor: COLORS.surfaceElevated,
+    borderTopWidth: 1, borderTopColor: COLORS.border,
+  },
+  composerContextLabel: { color: COLORS.primary, fontSize: SIZES.caption, fontWeight: '700' },
+  composerContextText: { color: COLORS.textMuted, fontSize: SIZES.small },
   inputBar: {
     flexDirection: 'row', alignItems: 'flex-end',
     padding: SIZES.sm, borderTopWidth: 1, borderTopColor: COLORS.border,

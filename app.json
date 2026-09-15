@@ -7,11 +7,11 @@
     "icon": "./assets/icon.png",
     "scheme": "propulse",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A0F1E"
-    },
+    // "splash": {
+    //   "image": "./assets/splash.png",
+    //   "resizeMode": "contain",
+    //   "backgroundColor": "#0A0F1E"
+    // },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.propulse.mobile",
@@ -85,7 +85,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "sdkVersion": "54.0.0"
+    }
   }
 }

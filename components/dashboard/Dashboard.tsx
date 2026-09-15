@@ -35,9 +35,9 @@ export const Dashboard = () => {
   const { chats } = useAppSelector((s) => s.chat);
   const { subscription } = useAppSelector((s) => s.account);
   const { pending } = useAppSelector((s) => s.asyncActions.fetchProjects);
-  const unreadCount = Object.values(chats).filter(
-    (c) => c.last_message && c.last_message.status !== 'read'
-  ).length;
+  const unreadCount = Object.values(chats).reduce(
+    (total, c) => total + (c.unread_count ?? 0), 0
+  );
 
   useEffect(() => {
     dispatch(fetchProjects() as any);

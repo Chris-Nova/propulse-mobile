@@ -47,9 +47,10 @@ export enum MemberRoles {
 }
 
 export enum ChatFilters {
-  DIRECT_MESSAGE = 'direct',
+  DIRECT_MESSAGE = 'direct_message',
   UNREAD = 'unread',
-  ROOM = 'room'
+  ROOM = 'room',
+  ALL = 'all'
 }
 
 export enum ModalTypes {
@@ -230,11 +231,29 @@ export interface TeamInvite {
 export interface File {
   status: 'uploading' | 'uploaded' | 'pending' | 'failed';
   created_at: string;
+  is_owner?: boolean;
   mime_type: string;
   name: string;
   size: number;
   url: string;
   id: string;
+}
+
+export interface Mention {
+  text: string;
+  id: string;
+}
+
+// Web positions the @mention popover with a DOMRect anchored to the caret.
+// RN has no DOMRect, so we anchor with a measured x/y/width/height instead.
+export interface MentionPopover {
+  anchorRect?: { x: number; y: number; width: number; height: number };
+  userId: string;
+}
+
+export interface MarkMessagesAsRead {
+  messageIds: string[];
+  chatId: string;
 }
 
 export interface Project {
@@ -278,6 +297,8 @@ export interface ChatParticipant {
 
 export interface ChatMessage {
   status: 'pending' | 'delivered' | 'sent' | 'read';
+  mentions: Array<Mention>;
+  voice_note?: File;
   is_deleted: boolean;
   files?: File[];
   edited_at?: string;
@@ -286,6 +307,13 @@ export interface ChatMessage {
   temp_id?: string;
   text?: string;
   id: string;
+  reply_to?: {
+    files?: Array<File>;
+    sender_name: string;
+    message_id: string;
+    member_id: string;
+    text?: string;
+  };
 }
 
 export interface Chat {
@@ -293,22 +321,33 @@ export interface Chat {
   created_by?: ChatParticipant;
   messages: ChatMessage[];
   last_message?: ChatMessage;
+  unread_count?: number;
   is_deleted: boolean;
+  created_at?: string;
   temp_id?: string;
   id: string;
-  room?: { avatar?: string; name: string };
+  room?: { avatar?: string; name: string; project_id?: string };
 }
 
 export interface ChatState {
-  activeChatsFilter?: ChatFilters;
+  activeChatsFilter: ChatFilters;
   teamMembersListOrder: Ordering;
+  suggestedMembers: TeamMember[];
   editedMessage?: ChatMessage;
   activeChatId?: string;
   showChats: boolean;
+  isRecording: boolean;
   teamMembers: TeamMember[];
   chats: Record<string, Chat>;
+  media: Document[];
+  count: number;
+  mention: MentionPopover;
   message: ChatMessage;
-  newChat: Chat;
+  model: Chat;
+  pagination: {
+    messages: { has_more: boolean; cursor?: string };
+    chat: { has_more: boolean; cursor?: string };
+  };
 }
 
 export interface TeamState {
@@ -456,5 +495,6 @@ export interface ModalState {
 
 export interface UpdateMessage {
   message: Partial<ChatMessage>;
+  defaultToId?: boolean;
   chatId: string;
 }
