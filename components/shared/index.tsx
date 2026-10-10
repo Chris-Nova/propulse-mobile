@@ -1,5 +1,5 @@
 import React from 'react';
-import {
+import { StyleProp,
   View,
   Text,
   ActivityIndicator,
@@ -114,7 +114,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 // ─── Card ──────────────────────────────────────────────────
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   padding?: boolean;
 }
 

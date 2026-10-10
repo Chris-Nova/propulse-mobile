@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, ImageStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { COLORS, SIZES } from '@/constants/theme';
 
@@ -33,7 +33,7 @@ const Avatar: React.FC<AvatarProps> = ({
     return (
       <Image
         source={{ uri }}
-        style={[{ width: size, height: size, borderRadius }, style]}
+        style={[{ width: size, height: size, borderRadius }, style as ImageStyle]}
         contentFit="cover"
       />
     );

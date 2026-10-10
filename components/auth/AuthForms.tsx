@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView
@@ -10,6 +10,8 @@ import { signUp, verifyEmail, resendVerificationEmail, sendPasswordResetEmail, r
 import { Input, PasswordInput } from '@/components/shared/Input';
 import Button from '@/components/shared/Button';
 import { COLORS, SIZES } from '@/constants/theme';
+import { AuthShell } from './AuthShell';
+import { AuthTitle, AuthSubtitle, AuthLinkText, AuthInput, AuthButton } from './AuthControls';
 
 // ─── Shared ────────────────────────────────────────────────
 const AuthFeedback = ({ message, success, pending }: { message: string; success: boolean; pending: boolean }) => {
@@ -33,56 +35,58 @@ export const SignUp = () => {
   const dispatch = useAppDispatch();
   const { model } = useAppSelector((s) => s.auth);
   const { pending, success, message } = useAppSelector((s) => s.asyncActions.signUp);
+  const [confirm, setConfirm] = useState('');
+  const mismatch = confirm.length > 0 && confirm !== model.password;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Create account</Text>
-        <Text style={styles.subheading}>Join Propulse and manage your projects</Text>
+    <AuthShell>
+      <AuthTitle>Create Account</AuthTitle>
+      <AuthSubtitle text="Already have an account?">
+        <Link href="/(auth)" asChild>
+          <TouchableOpacity>
+            <AuthLinkText>Sign In</AuthLinkText>
+          </TouchableOpacity>
+        </Link>
+      </AuthSubtitle>
 
-        <Input
-          label="First Name"
-          placeholder="John"
-          value={(model as any).first_name ?? ''}
-          onChangeText={(v) => dispatch(updateAuthModel({ first_name: v } as any))}
-          autoCapitalize="words"
-        />
-        <Input
-          label="Last Name"
-          placeholder="Doe"
-          value={(model as any).last_name ?? ''}
-          onChangeText={(v) => dispatch(updateAuthModel({ last_name: v } as any))}
-          autoCapitalize="words"
-        />
-        <Input
-          label="Email Address"
-          placeholder="johndoe@email.com"
-          value={model.email as string}
-          onChangeText={(v) => dispatch(updateAuthModel({ email: v }))}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <PasswordInput
-          label="Password"
-          placeholder="Min. 8 characters"
-          value={model.password}
-          onChangeText={(v) => dispatch(updateAuthModel({ password: v }))}
-        />
+      <AuthInput
+        placeholder="Email address"
+        value={model.email as string}
+        onChangeText={(v) => dispatch(updateAuthModel({ email: v }))}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+      />
+      <AuthInput
+        secure
+        placeholder="Password"
+        value={model.password}
+        onChangeText={(v) => dispatch(updateAuthModel({ password: v }))}
+        autoCapitalize="none"
+      />
+      <AuthInput
+        secure
+        placeholder="Confirm Password"
+        value={confirm}
+        onChangeText={setConfirm}
+        autoCapitalize="none"
+      />
 
-        <AuthFeedback message={message} success={success} pending={pending} />
-
-        <Button onPress={() => dispatch(signUp() as any)} loading={pending} fullWidth size="large">
-          Create Account
-        </Button>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <Link href="/(auth)/" asChild>
-            <TouchableOpacity><Text style={styles.footerLink}>Sign in</Text></TouchableOpacity>
-          </Link>
+      {mismatch ? (
+        <View style={[feedbackStyles.box, feedbackStyles.error]}>
+          <Text style={[feedbackStyles.text, { color: COLORS.error }]}>Passwords don't match</Text>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      ) : (
+        <AuthFeedback message={message} success={success} pending={pending} />
+      )}
+
+      <AuthButton
+        label="Sign Up"
+        loading={pending}
+        disabled={!model.email || !model.password || !confirm || mismatch}
+        onPress={() => dispatch(signUp() as any)}
+      />
+    </AuthShell>
   );
 };
 
@@ -119,7 +123,7 @@ export const ForgotPassword = () => {
         </Button>
 
         <View style={styles.footer}>
-          <Link href="/(auth)/" asChild>
+          <Link href="/(auth)" asChild>
             <TouchableOpacity><Text style={styles.footerLink}>← Back to Sign in</Text></TouchableOpacity>
           </Link>
         </View>

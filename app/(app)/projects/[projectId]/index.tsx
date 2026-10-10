@@ -82,7 +82,7 @@ const MilestoneCard = ({ milestone, canUpdateSubtasks }: { milestone: Milestone;
           </Text>
           {(milestone.start_date || milestone.end_date) && (
             <Text style={styles.milestoneDates}>
-              {milestone.start_date ?? "?"} -> {milestone.end_date ?? "?"}
+              {milestone.start_date ?? "?"} {'->'} {milestone.end_date ?? "?"}
             </Text>
           )}
           <ProgressBar value={milestone.progress ?? 0} />

@@ -374,6 +374,7 @@ export interface Plan {
   display_name: 'Enterprise' | 'Basic' | 'Pro';
   features: Record<PlanFeatures, PlanFeature>;
   billing_unit: 'per_company' | 'per_seat';
+  billing_period?: string;
   name: PlanNames;
   price: number;
   id: string;
@@ -497,4 +498,11 @@ export interface UpdateMessage {
   message: Partial<ChatMessage>;
   defaultToId?: boolean;
   chatId: string;
+}
+
+export type Messages = Record<string, Record<string, string>>;
+
+export interface GetMessageProps {
+  resourceType: string;
+  responseCode: string;
 }

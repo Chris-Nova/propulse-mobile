@@ -1,17 +1,12 @@
 {
   "expo": {
-    "name": "Propulse",
+    "name": "ProPulse",
     "slug": "propulse-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "propulse",
     "userInterfaceStyle": "automatic",
-    // "splash": {
-    //   "image": "./assets/splash.png",
-    //   "resizeMode": "contain",
-    //   "backgroundColor": "#0A0F1E"
-    // },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.propulse.mobile",
@@ -62,6 +57,26 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#734BA9",
+          "image": "./assets/splash-logo-white.png",
+          "imageWidth": 190,
+          "dark": {
+            "backgroundColor": "#000000",
+            "image": "./assets/splash-logo.png"
+          },
+          "android": {
+            "image": "./assets/splash-mark-white.png",
+            "imageWidth": 150,
+            "dark": {
+              "backgroundColor": "#000000",
+              "image": "./assets/splash-mark.png"
+            }
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-image-picker",

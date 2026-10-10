@@ -55,8 +55,9 @@ const MilestoneModal: React.FC<MilestoneModalProps> = ({
     if (visible) dispatch(fetchTeamMembers() as any);
   }, [visible]);
 
-  const update = (key: keyof Milestone, val: any) =>
+  const update = (key: keyof Milestone, val: any) => {
     dispatch(updateMilestoneModel({ [key]: val }));
+  };
 
   const addSubtask = () => {
     const subtask: Subtask = {

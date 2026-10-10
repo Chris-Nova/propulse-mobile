@@ -41,7 +41,7 @@ const MemberCard = ({ member, onDelete }: { member: TeamMember; onDelete: () => 
         <Badge label={member.role} color={roleStyle.color} bgColor={roleStyle.bg + '33'} />
       </View>
       {!member.is_owner && (
-        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} onStartShouldSetResponder={() => true}>
+        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn}>
           <Ionicons name="trash-outline" size={18} color={COLORS.error} />
         </TouchableOpacity>
       )}
@@ -57,7 +57,7 @@ const InviteForm = () => {
   const { pending } = useAppSelector((s) => s.asyncActions.sendTeamInvite);
   const [showForm, setShowForm] = useState(false);
 
-  const roleOptions: MemberRoles[] = ['collaborator', 'admin', 'client'];
+  const roleOptions: MemberRoles[] = [MemberRoles.COLLABORATOR, MemberRoles.ADMIN, MemberRoles.CLIENT];
 
   if (!showForm) {
     return (

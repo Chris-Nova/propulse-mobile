@@ -66,6 +66,7 @@ export const signIn = () => async (dispatch: AppDispatch) => {
 
 export const signUp = () => async (dispatch: AppDispatch) => {
   const { model } = store.getState().auth;
+  const fullName = `${(model as any).first_name ?? ''} ${(model as any).last_name ?? ''}`.trim();
   dispatch(startAsyncAction('signUp'));
 
   const { success, errors, code } = await Fetch({
@@ -75,7 +76,7 @@ export const signUp = () => async (dispatch: AppDispatch) => {
     body: {
       password: model.password,
       email: model.email,
-      name: `${(model as any).first_name ?? ''} ${(model as any).last_name ?? ''}`.trim(),
+      ...(fullName ? { name: fullName } : {}),
     },
   });
 
@@ -139,7 +140,7 @@ export const verifyEmail = () => async (dispatch: AppDispatch) => {
   }) as any);
 
   if (success) {
-    router.replace('/(auth)/');
+    router.replace('/(auth)');
   }
 
   return success;
@@ -196,11 +197,23 @@ export const resetPassword = () => async (dispatch: AppDispatch) => {
   }) as any);
 
   if (success) {
-    router.replace('/(auth)/');
+    router.replace('/(auth)');
   }
 };
 
 export const signOut = () => async (dispatch: AppDispatch) => {
   await TokenStorage.clear();
-  router.replace('/(auth)/');
+  router.replace('/(auth)');
+};
+
+// Google sign-in is not wired up yet. Finishing it needs (1) Google OAuth client
+// IDs for iOS/Android, and (2) a backend endpoint that exchanges a Google ID token
+// for a ProPulse session. Until then the button reports that honestly instead of
+// pretending to work.
+export const signInWithGoogle = () => async (dispatch: AppDispatch) => {
+  dispatch(showFeedback({
+    feedbackType: 'notification',
+    type: 'info',
+    message: "Google sign-in isn't available yet. Please use email for now.",
+  }));
 };

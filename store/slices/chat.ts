@@ -97,9 +97,12 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
 
 export const connectSocket = () => async (dispatch: AppDispatch) => {
   const token = await TokenStorage.getToken();
-  if (!token) return;
+  const { user } = store.getState().account;
+  if (!token || !user?.id) return;
 
-  socket = new WebSocket(`${WS_URL}/ws/messages/?token=${token}`);
+  // Backend route is `ws/<user_uuid>/?token=...` (apps/messages/routing.py) —
+  // it's a single unified socket per user, not per-conversation.
+  socket = new WebSocket(`${WS_URL}/ws/${user.id}/?token=${token}`);
 
   socket.onmessage = (event) => {
     try {
@@ -119,19 +122,19 @@ export const disconnectSocket = () => () => {
   }
 };
 
-export const fetchChats = (filter: ChatFilters = ChatFilters.ALL, page = 1) => async (dispatch: AppDispatch) => {
+export const fetchChats = (filter: ChatFilters = ChatFilters.ALL) => async (dispatch: AppDispatch) => {
   dispatch(startAsyncAction('fetchChats'));
 
-  const query = new URLSearchParams({ filter, page: String(page) }).toString();
+  // The backend's list_conversations endpoint returns the full set for the
+  // given filter in one response — there's no `page`/`cursor` param here.
+  const query = new URLSearchParams({ filter }).toString();
   const { success, message, data } = await Fetch({ path: `/messages/conversations?${query}` });
 
   dispatch(finishAsyncAction({ target: 'fetchChats', success, message }) as any);
   if (!success || !Array.isArray(data?.conversations)) return;
 
-  const { chats: existingChats } = store.getState().chat;
-  let chats: Record<string, Chat> = {};
+  const chats: Record<string, Chat> = {};
   for (const chat of data.conversations as Chat[]) chats[chat.id] = chat;
-  if (page > 1) chats = { ...chats, ...existingChats };
 
   dispatch(setActiveChatsFilter(data.filter ?? filter));
   dispatch(setChatsCount(data.count ?? data.conversations.length));
@@ -160,7 +163,19 @@ export const fetchMessages = (chatId: string, cursor = '') => async (dispatch: A
     messages: { has_more: !!data.has_more, cursor: data.cursor },
   }));
 
-  dispatch(updateChats({ ...existingChat, messages }));
+  // The backend marks the whole conversation read as a side effect of this
+  // call (see MessageService.get_conversation_messages), so reflect that
+  // locally right away instead of waiting on a follow-up fetchChats.
+  dispatch(updateChats({ ...existingChat, messages, unread_count: cursor ? existingChat.unread_count : 0 }));
+};
+
+export const markConversationAsRead = (chatId: string) => async (dispatch: AppDispatch) => {
+  const { success } = await Fetch({ path: `/messages/conversations/${chatId}/read`, method: 'POST' });
+  if (success) {
+    const { chats } = store.getState().chat;
+    const chat = chats[chatId];
+    if (chat) dispatch(updateChats({ ...chat, unread_count: 0 }));
+  }
 };
 
 export const sendMessage = (chat: Chat, text: string, replyTo?: ChatMessage['reply_to'], mentions: Mention[] = []) =>
