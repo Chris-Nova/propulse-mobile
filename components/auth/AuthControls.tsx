@@ -39,9 +39,10 @@ export const AuthLinkText = ({ children, small }: { children: string; small?: bo
 
 interface AuthInputProps extends TextInputProps {
   secure?: boolean; // adds the show/hide eye toggle
+  leftIcon?: React.ComponentProps<typeof Ionicons>['name'];
 }
 
-export const AuthInput = ({ secure, style, ...rest }: AuthInputProps) => {
+export const AuthInput = ({ secure, leftIcon, style, ...rest }: AuthInputProps) => {
   const theme = useAuthTheme();
   const [hidden, setHidden] = useState(true);
 
@@ -50,8 +51,12 @@ export const AuthInput = ({ secure, style, ...rest }: AuthInputProps) => {
       style={[
         styles.inputWrap,
         { backgroundColor: theme.inputBg, borderColor: theme.inputBorder },
+        leftIcon ? { paddingLeft: 30 } : null,
       ]}
     >
+      {leftIcon && (
+        <Ionicons name={leftIcon} size={18} color={theme.inputIcon} style={{ marginRight: 22 }} />
+      )}
       <TextInput
         {...rest}
         secureTextEntry={secure ? hidden : rest.secureTextEntry}

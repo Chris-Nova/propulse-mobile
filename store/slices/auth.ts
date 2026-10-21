@@ -146,7 +146,7 @@ export const verifyEmail = () => async (dispatch: AppDispatch) => {
   return success;
 };
 
-export const sendPasswordResetEmail = () => async (dispatch: AppDispatch) => {
+export const sendPasswordResetEmail = (opts: { navigate?: boolean } = {}) => async (dispatch: AppDispatch) => {
   const { model } = store.getState().auth;
   dispatch(startAsyncAction('sendPasswordResetEmail'));
 
@@ -166,8 +166,9 @@ export const sendPasswordResetEmail = () => async (dispatch: AppDispatch) => {
     message,
   }) as any);
 
-  if (success) {
-    router.replace('/(auth)/password-reset');
+  if (success && opts.navigate !== false) {
+    // Code entry comes first; the new password is collected on the next screen.
+    router.push('/(auth)/verify-email?mode=reset');
   }
 };
 
@@ -203,7 +204,7 @@ export const resetPassword = () => async (dispatch: AppDispatch) => {
 
 export const signOut = () => async (dispatch: AppDispatch) => {
   await TokenStorage.clear();
-  router.replace('/(auth)');
+  router.replace('/(auth)/welcome');
 };
 
 // Google sign-in is not wired up yet. Finishing it needs (1) Google OAuth client

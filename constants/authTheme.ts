@@ -21,6 +21,12 @@ export interface AuthTheme {
   button: string;
   buttonText: string;
   statusBar: 'light' | 'dark';
+  // Screens with the purple header + rounded sheet (verify, forgot, reset)
+  sheetBackground: string;
+  sheetText: string;
+  sheetGlowOpacity: number;
+  otpBg: string;
+  otpText: string;
   // [offset, color] stops for the top-left shape, bottom-left -> top-right
   shapeStops: [number, string][];
 }
@@ -40,6 +46,12 @@ const dark: AuthTheme = {
   button: BRAND_PURPLE,
   buttonText: '#FFFFFF',
   statusBar: 'light',
+  // No dark design supplied yet for these screens: derived from the dark Login/Welcome look.
+  sheetBackground: '#000000',
+  sheetText: '#FFFFFF',
+  sheetGlowOpacity: 0.22,
+  otpBg: '#F4F2F7',
+  otpText: '#111111',
   shapeStops: [[0, '#222123'], [0.15, '#363338'], [0.85, BRAND_PURPLE], [1, BRAND_PURPLE]],
 };
 
@@ -58,6 +70,11 @@ const light: AuthTheme = {
   button: BRAND_PURPLE,
   buttonText: '#FFFFFF',
   statusBar: 'dark',
+  sheetBackground: '#FFFFFF',
+  sheetText: '#000000',
+  sheetGlowOpacity: 0.26,
+  otpBg: '#DFDFDF',
+  otpText: '#000000',
   shapeStops: [[0, '#F1EFF4'], [0.95, BRAND_PURPLE], [1, BRAND_PURPLE]],
 };
 

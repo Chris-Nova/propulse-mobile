@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { updateAuthModel } from '@/store/reducers/auth';
 import { signUp, verifyEmail, resendVerificationEmail, sendPasswordResetEmail, resetPassword } from '@/store/slices/auth';
@@ -11,6 +11,9 @@ import { Input, PasswordInput } from '@/components/shared/Input';
 import Button from '@/components/shared/Button';
 import { COLORS, SIZES } from '@/constants/theme';
 import { AuthShell } from './AuthShell';
+import { AuthSheetShell } from './AuthSheetShell';
+import { OtpInput } from './OtpInput';
+import { AUTH_FONT, useAuthTheme } from '@/constants/authTheme';
 import { AuthTitle, AuthSubtitle, AuthLinkText, AuthInput, AuthButton } from './AuthControls';
 
 // ─── Shared ────────────────────────────────────────────────
@@ -97,87 +100,101 @@ export const ForgotPassword = () => {
   const { pending, success, message } = useAppSelector((s) => s.asyncActions.sendPasswordResetEmail);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Forgot Password?</Text>
-        <Text style={styles.subheading}>We'll send you a reset code by email</Text>
+    <AuthSheetShell
+      title="Forgot Password"
+      intro="Enter the email that you used to sign up your account"
+    >
+      <AuthInput
+        leftIcon="mail"
+        placeholder="Email address"
+        value={model.email as string}
+        onChangeText={(v) => dispatch(updateAuthModel({ email: v }))}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoComplete="email"
+      />
 
-        <Input
-          label="Email Address"
-          placeholder="johndoe@email.com"
-          value={model.email as string}
-          onChangeText={(v) => dispatch(updateAuthModel({ email: v }))}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
+      <AuthFeedback message={message} success={success} pending={pending} />
 
-        <AuthFeedback message={message} success={success} pending={pending} />
-
-        <Button
-          onPress={() => dispatch(sendPasswordResetEmail() as any)}
-          loading={pending}
-          disabled={!model.email}
-          fullWidth size="large"
-        >
-          Send Reset Code
-        </Button>
-
-        <View style={styles.footer}>
-          <Link href="/(auth)" asChild>
-            <TouchableOpacity><Text style={styles.footerLink}>← Back to Sign in</Text></TouchableOpacity>
-          </Link>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <AuthButton
+        label="Recover Password"
+        loading={pending}
+        disabled={!model.email}
+        onPress={() => dispatch(sendPasswordResetEmail() as any)}
+      />
+    </AuthSheetShell>
   );
 };
 
 // ─── Verify Email ──────────────────────────────────────────
+// Used twice: after sign-up (verifies the email) and during password recovery
+// (?mode=reset), where the code is only collected here and sent along with the
+// new password on the next screen.
 export const VerifyEmail = () => {
   const dispatch = useAppDispatch();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isReset = mode === 'reset';
   const { model } = useAppSelector((s) => s.auth);
   const { pending, success, message } = useAppSelector((s) => s.asyncActions.verifyEmail);
   const { pending: resending } = useAppSelector((s) => s.asyncActions.resendVerificationEmail);
+  const { pending: resendingReset } = useAppSelector((s) => s.asyncActions.sendPasswordResetEmail);
+  const code = model.otp ?? '';
+
+  // Start with an empty code every time this screen opens
+  useEffect(() => {
+    dispatch(updateAuthModel({ otp: '' }));
+  }, [dispatch]);
+
+  const onVerify = () => {
+    if (isReset) {
+      router.push('/(auth)/password-reset');
+    } else {
+      dispatch(verifyEmail() as any);
+    }
+  };
+
+  const onResend = () => {
+    if (isReset) {
+      dispatch(sendPasswordResetEmail({ navigate: false }) as any);
+    } else {
+      dispatch(resendVerificationEmail() as any);
+    }
+  };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Verify Email</Text>
-        <Text style={styles.subheading}>
-          Enter the OTP code sent to {model.email || 'your email'}
+    <AuthSheetShell
+      title="Email Verification"
+      intro="Please enter the 6 digit code that was sent to your email address"
+    >
+      <OtpInput value={code} onChange={(v) => dispatch(updateAuthModel({ otp: v }))} />
+
+      <AuthResendRow onResend={onResend} busy={isReset ? resendingReset : resending} />
+
+      {!isReset && <AuthFeedback message={message} success={success} pending={pending} />}
+
+      <AuthButton
+        label="Verify and Proceed"
+        loading={!isReset && pending}
+        disabled={code.length < 6}
+        onPress={onVerify}
+      />
+    </AuthSheetShell>
+  );
+};
+
+const AuthResendRow = ({ onResend, busy }: { onResend: () => void; busy: boolean }) => {
+  const theme = useAuthTheme();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 26 }}>
+      <Text style={{ color: theme.sheetText, fontSize: 15, fontFamily: AUTH_FONT }}>
+        Did not receive code?{' '}
+      </Text>
+      <TouchableOpacity onPress={onResend} disabled={busy}>
+        <Text style={{ color: theme.link, fontSize: 15, fontWeight: '700', opacity: busy ? 0.5 : 1, fontFamily: AUTH_FONT }}>
+          {busy ? 'Sending…' : 'Resend'}
         </Text>
-
-        <Input
-          label="OTP Code"
-          placeholder="Enter 6-digit code"
-          value={model.otp}
-          onChangeText={(v) => dispatch(updateAuthModel({ otp: v }))}
-          keyboardType="number-pad"
-          maxLength={6}
-        />
-
-        <AuthFeedback message={message} success={success} pending={pending} />
-
-        <Button
-          onPress={() => dispatch(verifyEmail() as any)}
-          loading={pending}
-          disabled={!model.otp}
-          fullWidth size="large"
-        >
-          Verify Email
-        </Button>
-
-        <Button
-          onPress={() => dispatch(resendVerificationEmail() as any)}
-          loading={resending}
-          variant="ghost"
-          fullWidth
-          style={{ marginTop: SIZES.sm }}
-        >
-          Resend Code
-        </Button>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -186,45 +203,44 @@ export const PasswordReset = () => {
   const dispatch = useAppDispatch();
   const { model } = useAppSelector((s) => s.auth);
   const { pending, success, message } = useAppSelector((s) => s.asyncActions.resetPassword);
+  const confirm = (model as any).confirm_password ?? '';
+  const mismatch = confirm.length > 0 && confirm !== model.password;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>Reset Password</Text>
-        <Text style={styles.subheading}>Enter your OTP and new password</Text>
+    <AuthSheetShell
+      title="Reset Password"
+      intro="Your new password must be different from previously used password"
+    >
+      <AuthInput
+        secure
+        placeholder="Password"
+        value={model.password}
+        onChangeText={(v) => dispatch(updateAuthModel({ password: v }))}
+        autoCapitalize="none"
+      />
+      <AuthInput
+        secure
+        placeholder="Confirm Password"
+        value={confirm}
+        onChangeText={(v) => dispatch(updateAuthModel({ confirm_password: v } as any))}
+        autoCapitalize="none"
+      />
 
-        <Input
-          label="OTP Code"
-          placeholder="Enter 6-digit code"
-          value={model.otp}
-          onChangeText={(v) => dispatch(updateAuthModel({ otp: v }))}
-          keyboardType="number-pad"
-          maxLength={6}
-        />
-        <PasswordInput
-          label="New Password"
-          placeholder="Min. 8 characters"
-          value={model.password}
-          onChangeText={(v) => dispatch(updateAuthModel({ password: v }))}
-        />
-        <PasswordInput
-          label="Confirm Password"
-          placeholder="Repeat your password"
-          value={(model as any).confirm_password ?? ''}
-          onChangeText={(v) => dispatch(updateAuthModel({ confirm_password: v } as any))}
-        />
-
+      {mismatch ? (
+        <View style={[feedbackStyles.box, feedbackStyles.error]}>
+          <Text style={[feedbackStyles.text, { color: COLORS.error }]}>Passwords don't match</Text>
+        </View>
+      ) : (
         <AuthFeedback message={message} success={success} pending={pending} />
+      )}
 
-        <Button
-          onPress={() => dispatch(resetPassword() as any)}
-          loading={pending}
-          fullWidth size="large"
-        >
-          Reset Password
-        </Button>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <AuthButton
+        label="Continue"
+        loading={pending}
+        disabled={!model.password || !confirm || mismatch}
+        onPress={() => dispatch(resetPassword() as any)}
+      />
+    </AuthSheetShell>
   );
 };
 
