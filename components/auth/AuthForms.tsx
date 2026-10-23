@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Linking,
   KeyboardAvoidingView, Platform, ScrollView
 } from 'react-native';
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { updateAuthModel } from '@/store/reducers/auth';
+import { updateAuthModel, setInvite } from '@/store/reducers/auth';
 import { signUp, verifyEmail, resendVerificationEmail, sendPasswordResetEmail, resetPassword } from '@/store/slices/auth';
 import { Input, PasswordInput } from '@/components/shared/Input';
 import Button from '@/components/shared/Button';
@@ -14,7 +14,11 @@ import { AuthShell } from './AuthShell';
 import { AuthSheetShell } from './AuthSheetShell';
 import { OtpInput } from './OtpInput';
 import { AUTH_FONT, useAuthTheme } from '@/constants/authTheme';
-import { AuthTitle, AuthSubtitle, AuthLinkText, AuthInput, AuthButton } from './AuthControls';
+import {
+  AuthTitle, AuthSubtitle, AuthLinkText, AuthInput, AuthButton, AuthFieldError, AuthCheckbox,
+} from './AuthControls';
+import { PasswordRequirements } from './PasswordRequirements';
+import { isValidName, isValidEmail, validatePassword } from '@/utils/validators';
 
 // ─── Shared ────────────────────────────────────────────────
 const AuthFeedback = ({ message, success, pending }: { message: string; success: boolean; pending: boolean }) => {
@@ -34,12 +38,39 @@ const feedbackStyles = StyleSheet.create({
 });
 
 // ─── Sign Up ───────────────────────────────────────────────
+// The web app links to /terms-of-service on its own domain; confirm this URL is live.
+const TERMS_URL = 'https://getpropulse.app/terms-of-service';
+
 export const SignUp = () => {
   const dispatch = useAppDispatch();
-  const { model } = useAppSelector((s) => s.auth);
+  const { invite, model } = useAppSelector((s) => s.auth);
   const { pending, success, message } = useAppSelector((s) => s.asyncActions.signUp);
+  const params = useLocalSearchParams<{ invite_email?: string; invite_id?: string }>();
+  const theme = useAuthTheme();
   const [confirm, setConfirm] = useState('');
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (key: string) => setTouched((t) => ({ ...t, [key]: true }));
+
+  // Arriving from a team invite: the email is pre-filled and locked (same as web).
+  useEffect(() => {
+    if (params.invite_email && params.invite_id) {
+      dispatch(setInvite({ email: String(params.invite_email), id: String(params.invite_id) }));
+    }
+  }, [dispatch, params.invite_email, params.invite_id]);
+
+  const first = (model.first_name ?? '').trim();
+  const last = (model.last_name ?? '').trim();
+  const firstError = isValidName(first, 'Firstname');
+  const lastError = isValidName(last, 'Lastname');
+  const emailValid = isValidEmail(model.email ?? '');
+  const passwordValid = validatePassword(model.password ?? '').isValid;
   const mismatch = confirm.length > 0 && confirm !== model.password;
+  const nameError =
+    (touched.first_name && firstError) || (touched.last_name && lastError) || '';
+
+  const canSubmit =
+    !firstError && !lastError && emailValid && passwordValid &&
+    confirm === model.password && !!model.is_terms_accepted;
 
   return (
     <AuthShell>
@@ -52,14 +83,46 @@ export const SignUp = () => {
         </Link>
       </AuthSubtitle>
 
+      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 25 }}>
+        <AuthInput
+          compact
+          placeholder="First name"
+          value={model.first_name ?? ''}
+          onChangeText={(v) => dispatch(updateAuthModel({ first_name: v }))}
+          onBlur={() => touch('first_name')}
+          invalid={!!touched.first_name && !!firstError}
+          containerStyle={{ flex: 1, marginBottom: 0 }}
+          autoCapitalize="words"
+          autoComplete="given-name"
+        />
+        <AuthInput
+          compact
+          placeholder="Last name"
+          value={model.last_name ?? ''}
+          onChangeText={(v) => dispatch(updateAuthModel({ last_name: v }))}
+          onBlur={() => touch('last_name')}
+          invalid={!!touched.last_name && !!lastError}
+          containerStyle={{ flex: 1, marginBottom: 0 }}
+          autoCapitalize="words"
+          autoComplete="family-name"
+        />
+      </View>
+      <AuthFieldError>{nameError}</AuthFieldError>
+
       <AuthInput
         placeholder="Email address"
         value={model.email as string}
         onChangeText={(v) => dispatch(updateAuthModel({ email: v }))}
+        onBlur={() => touch('email')}
+        invalid={!!touched.email && !emailValid}
+        editable={!invite}
+        containerStyle={invite ? { opacity: 0.6 } : undefined}
         keyboardType="email-address"
         autoCapitalize="none"
         autoComplete="email"
       />
+      <AuthFieldError>{touched.email && !emailValid ? 'Invalid email' : ''}</AuthFieldError>
+
       <AuthInput
         secure
         placeholder="Password"
@@ -67,26 +130,38 @@ export const SignUp = () => {
         onChangeText={(v) => dispatch(updateAuthModel({ password: v }))}
         autoCapitalize="none"
       />
+      <PasswordRequirements password={model.password} />
+
       <AuthInput
         secure
         placeholder="Confirm Password"
         value={confirm}
         onChangeText={setConfirm}
+        invalid={mismatch}
         autoCapitalize="none"
       />
+      <AuthFieldError>{mismatch ? "Passwords don't match" : ''}</AuthFieldError>
 
-      {mismatch ? (
-        <View style={[feedbackStyles.box, feedbackStyles.error]}>
-          <Text style={[feedbackStyles.text, { color: COLORS.error }]}>Passwords don't match</Text>
-        </View>
-      ) : (
-        <AuthFeedback message={message} success={success} pending={pending} />
-      )}
+      <AuthCheckbox
+        checked={!!model.is_terms_accepted}
+        onToggle={() => dispatch(updateAuthModel({ is_terms_accepted: !model.is_terms_accepted }))}
+      >
+        Almost there! Please agree to the{' '}
+        <Text
+          style={{ color: theme.link, fontWeight: '700' }}
+          onPress={() => Linking.openURL(TERMS_URL)}
+        >
+          Terms &amp; Conditions
+        </Text>{' '}
+        to create your account.
+      </AuthCheckbox>
+
+      <AuthFeedback message={message} success={success} pending={pending} />
 
       <AuthButton
         label="Sign Up"
         loading={pending}
-        disabled={!model.email || !model.password || !confirm || mismatch}
+        disabled={!canSubmit}
         onPress={() => dispatch(signUp() as any)}
       />
     </AuthShell>

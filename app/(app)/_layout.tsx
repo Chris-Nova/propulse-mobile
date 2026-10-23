@@ -1,77 +1,104 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
-import { COLORS, SIZES } from '@/constants/theme';
-
-const TabIcon = ({ name, focused }: { name: keyof typeof Ionicons.glyphMap; focused: boolean }) => (
-  <Ionicons
-    name={focused ? name : `${name}-outline` as any}
-    size={SIZES.iconLg}
-    color={focused ? COLORS.primary : COLORS.textMuted}
-  />
-);
+import { View, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useDashboardTheme } from '@/constants/dashboardTheme';
 
 const hidden = {
   tabBarButton: () => null,
   tabBarItemStyle: { display: 'none' as const, width: 0, height: 0 },
 };
 
+// Screens opened from the "More" tab (or from Quick Actions) keep "More" highlighted.
+const isUnder = (pathname: string, prefix: string) =>
+  pathname === prefix || pathname.startsWith(`${prefix}/`);
+
 export default function AppLayout() {
+  const theme = useDashboardTheme();
+  const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+  const bar = theme.tabBar;
+
+  const active = {
+    // Messages is opened from Home's Quick Actions, so Home stays lit there.
+    home: isUnder(pathname, '/dashboard') || isUnder(pathname, '/messages') || pathname === '/',
+    projects: isUnder(pathname, '/projects'),
+    teams: isUnder(pathname, '/teams'),
+    more: ['/more', '/documents', '/analytics', '/account'].some((p) => isUnder(pathname, p)),
+  };
+
+  const icon = (name: keyof typeof Ionicons.glyphMap, focusedName: keyof typeof Ionicons.glyphMap, on: boolean) =>
+    () => <Ionicons name={on ? focusedName : name} size={22} color={on ? bar.active : bar.inactive} />;
+
+  // Label with the small purple underline the design shows under the active tab.
+  const label = (text: string, on: boolean) => () => (
+    <View style={{ alignItems: 'center' }}>
+      <Text style={{ fontSize: 10, fontWeight: on ? '600' : '400', color: on ? bar.active : bar.inactive }}>
+        {text}
+      </Text>
+      <View
+        style={{
+          marginTop: 4, width: 22, height: 2, borderRadius: 1,
+          backgroundColor: on ? bar.active : 'transparent',
+        }}
+      />
+    </View>
+  );
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: COLORS.surface,
-          borderTopColor: COLORS.border,
-          borderTopWidth: 1,
-          height: SIZES.tabBarHeight + (Platform.OS === 'ios' ? 20 : 0),
-          paddingBottom: Platform.OS === 'ios' ? 20 : SIZES.sm,
-          paddingTop: SIZES.xs,
+          backgroundColor: bar.background,
+          borderTopColor: bar.border,
+          borderTopWidth: theme.shadow ? 0 : 1,
+          ...(theme.shadow
+            ? { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: -2 }, elevation: 12 }
+            : { elevation: 0 }),
+          height: 58 + Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 8,
         },
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarLabelStyle: { fontSize: SIZES.caption, fontWeight: '600' },
       }}
     >
-      {/* Visible tabs */}
+      {/* Visible tabs, in the order shown in the design */}
       <Tabs.Screen
         name="dashboard/index"
         options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="teams/index"
-        options={{
-          title: 'Teams',
-          tabBarIcon: ({ focused }) => <TabIcon name="people" focused={focused} />,
+          title: 'Home',
+          tabBarIcon: icon('home-outline', 'home', active.home),
+          tabBarLabel: label('Home', active.home),
         }}
       />
       <Tabs.Screen
         name="projects/index"
         options={{
           title: 'Projects',
-          tabBarIcon: ({ focused }) => <TabIcon name="folder" focused={focused} />,
+          tabBarIcon: icon('folder-outline', 'folder', active.projects),
+          tabBarLabel: label('Projects', active.projects),
         }}
       />
       <Tabs.Screen
-        name="documents/index"
+        name="teams/index"
         options={{
-          title: 'Documents',
-          tabBarIcon: ({ focused }) => <TabIcon name="document-text" focused={focused} />,
+          title: 'Teams',
+          tabBarIcon: icon('people-outline', 'people', active.teams),
+          tabBarLabel: label('Teams', active.teams),
         }}
       />
       <Tabs.Screen
-        name="analytics/index"
+        name="more/index"
         options={{
-          title: 'Analytics',
-          tabBarIcon: ({ focused }) => <TabIcon name="bar-chart" focused={focused} />,
+          title: 'More',
+          tabBarIcon: icon('ellipsis-horizontal', 'ellipsis-horizontal', active.more),
+          tabBarLabel: label('More', active.more),
         }}
       />
 
       {/* Hidden screens */}
+      <Tabs.Screen name="documents/index" options={hidden} />
+      <Tabs.Screen name="analytics/index" options={hidden} />
       <Tabs.Screen name="messages/index" options={hidden} />
       <Tabs.Screen name="messages/[chatId]/index" options={hidden} />
       <Tabs.Screen name="account/index" options={hidden} />

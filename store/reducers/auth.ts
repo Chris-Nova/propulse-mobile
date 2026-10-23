@@ -9,6 +9,8 @@ export const initialState: AuthState = {
     is_terms_accepted: false,
     password: '',
     email: '',
+    first_name: '',
+    last_name: '',
     name: '',
     otp: '',
   },

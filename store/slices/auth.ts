@@ -22,6 +22,22 @@ const finishAsyncAction = (payload: any) => (dispatch: AppDispatch) => {
   dispatch(endAsyncAction(payload));
 };
 
+// Stores the tokens + user from a successful login response and routes onward.
+// Shared by email login and Google login (the backend returns the same payload).
+const startSession = async (dispatch: AppDispatch, data: any) => {
+  await TokenStorage.setToken(data.access_token);
+  if (data.refresh_token) await TokenStorage.setRefreshToken(data.refresh_token);
+  if (data.user) {
+    await TokenStorage.setUser(data.user);
+    dispatch(setUser(data.user));
+  }
+  if (data.user?.profile_completed) {
+    router.replace('/(app)/dashboard');
+  } else {
+    router.replace('/company/setup');
+  }
+};
+
 export const signIn = () => async (dispatch: AppDispatch) => {
   const { model } = store.getState().auth;
   dispatch(startAsyncAction('signIn'));
@@ -48,17 +64,7 @@ export const signIn = () => async (dispatch: AppDispatch) => {
   }) as any);
 
   if (success && data) {
-    await TokenStorage.setToken(data.access_token);
-    if (data.refresh_token) await TokenStorage.setRefreshToken(data.refresh_token);
-    if (data.user) {
-      await TokenStorage.setUser(data.user);
-      dispatch(setUser(data.user));
-    }
-    if (data.user?.profile_completed) {
-      router.replace('/(app)/dashboard');
-    } else {
-      router.replace('/company/setup');
-    }
+    await startSession(dispatch, data);
   }
 
   return success;
@@ -66,9 +72,9 @@ export const signIn = () => async (dispatch: AppDispatch) => {
 
 export const signUp = () => async (dispatch: AppDispatch) => {
   const { model } = store.getState().auth;
-  const fullName = `${(model as any).first_name ?? ''} ${(model as any).last_name ?? ''}`.trim();
   dispatch(startAsyncAction('signUp'));
 
+  // POST /users/register requires `name` (first + last, each 2+ characters).
   const { success, errors, code } = await Fetch({
     removeToken: true,
     path: '/users/register',
@@ -76,11 +82,13 @@ export const signUp = () => async (dispatch: AppDispatch) => {
     body: {
       password: model.password,
       email: model.email,
-      ...(fullName ? { name: fullName } : {}),
+      name: `${(model.first_name ?? '').trim()} ${(model.last_name ?? '').trim()}`.trim(),
     },
   });
 
-  const validationErrorMessage = capitalize(errors?.email?.[0] ?? '');
+  const validationErrorMessage = capitalize(
+    errors?.name?.[0] ?? errors?.email?.[0] ?? errors?.password?.[0] ?? errors?.non_field_errors?.[0] ?? ''
+  );
   const message = validationErrorMessage || getMessage('signUp', code ?? '');
 
   dispatch(finishAsyncAction({
@@ -207,14 +215,56 @@ export const signOut = () => async (dispatch: AppDispatch) => {
   router.replace('/(auth)/welcome');
 };
 
-// Google sign-in is not wired up yet. Finishing it needs (1) Google OAuth client
-// IDs for iOS/Android, and (2) a backend endpoint that exchanges a Google ID token
-// for a ProPulse session. Until then the button reports that honestly instead of
-// pretending to work.
+// Google sign-in. The backend (POST /users/google-auth) verifies the Google ID token
+// against ONE client ID (GOOGLE_OAUTH2_CLIENT_ID), so the app must request its token
+// with that same *web* client ID as `webClientId`. Native Google sign-in needs a
+// development/production build, it cannot run inside Expo Go, so the native module is
+// loaded lazily and the button degrades to a clear message when it isn't available.
 export const signInWithGoogle = () => async (dispatch: AppDispatch) => {
-  dispatch(showFeedback({
-    feedbackType: 'notification',
-    type: 'info',
-    message: "Google sign-in isn't available yet. Please use email for now.",
-  }));
+  const notify = (message: string, type: 'info' | 'error' = 'info') =>
+    dispatch(showFeedback({ feedbackType: 'notification', type, message }));
+
+  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  let GoogleSignin: any;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+  } catch {
+    GoogleSignin = null;
+  }
+
+  if (!GoogleSignin || !webClientId) {
+    notify('Google sign-in needs a development build with Google set up. Please use email for now.');
+    return;
+  }
+
+  try {
+    GoogleSignin.configure({ webClientId, scopes: ['email', 'profile'] });
+    await GoogleSignin.hasPlayServices();
+    const result = await GoogleSignin.signIn();
+    const idToken = result?.data?.idToken ?? result?.idToken;
+    if (!idToken) return; // user dismissed the Google sheet
+
+    dispatch(startAsyncAction('signIn'));
+    const { success, data, code } = await Fetch({
+      path: '/users/google-auth',
+      removeToken: true,
+      method: 'POST',
+      body: { id_token: idToken },
+    });
+
+    const message = getMessage('signIn', code ?? (success ? 'login_successful' : 'server_error'));
+    dispatch(finishAsyncAction({
+      feedbackType: !success ? 'notification' : undefined,
+      target: 'signIn',
+      success,
+      message,
+    }) as any);
+
+    if (success && data) await startSession(dispatch, data);
+  } catch (error: any) {
+    // 12501 / SIGN_IN_CANCELLED = the person closed the Google sheet; not an error.
+    if (error?.code === 'SIGN_IN_CANCELLED' || error?.code === '12501') return;
+    notify('Google sign-in failed. Please try again or use email.', 'error');
+  }
 };
