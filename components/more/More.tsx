@@ -22,6 +22,7 @@ export const More = () => {
   const open = (url: string) => Linking.openURL(url).catch(() => {});
 
   const rows: Row[] = [
+    { label: 'Messages', icon: 'mail-outline', onPress: () => router.push('/(app)/messages' as any) },
     { label: 'Documents', icon: 'document-text-outline', onPress: () => router.push('/(app)/documents' as any) },
     { label: 'Analytics', icon: 'bar-chart-outline', onPress: () => router.push('/(app)/analytics' as any) },
     { label: 'Settings', icon: 'settings-outline', onPress: () => router.push('/(app)/account' as any) },

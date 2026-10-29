@@ -6,6 +6,7 @@ import Toast from 'react-native-toast-message';
 import * as SplashScreen from 'expo-splash-screen';
 import { store } from '@/store';
 import { registerSignOutCallback } from '@/utils/api';
+import { restoreColorScheme } from '@/utils/appearance';
 import { signOut } from '@/store/slices/auth';
 import { FeedbackToast } from '@/components/shared/FeedbackToast';
 
@@ -17,7 +18,8 @@ export default function RootLayout() {
     registerSignOutCallback(() => {
       store.dispatch(signOut() as any);
     });
-    SplashScreen.hideAsync();
+    // Apply a saved Dark mode choice before the native splash goes away, so there is no flash.
+    restoreColorScheme().finally(() => SplashScreen.hideAsync());
   }, []);
 
   return (
