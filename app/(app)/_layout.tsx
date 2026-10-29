@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { View, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDashboardTheme } from '@/constants/dashboardTheme';
+import { MenuProvider } from '@/components/menu/MenuContext';
 
 const hidden = {
   tabBarButton: () => null,
@@ -46,6 +47,7 @@ export default function AppLayout() {
   );
 
   return (
+    <MenuProvider>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -107,5 +109,6 @@ export default function AppLayout() {
       <Tabs.Screen name="projects/[projectId]/edit" options={hidden} />
       <Tabs.Screen name="teams/members/[memberId]/index" options={hidden} />
     </Tabs>
+    </MenuProvider>
   );
 }

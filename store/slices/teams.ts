@@ -19,14 +19,16 @@ export const fetchTeamMembers = () => async (dispatch: AppDispatch) => {
   dispatch(startAsyncAction('fetchTeamMembers'));
   const { success, message, data } = await Fetch({ path: '/teams/members' });
   dispatch(finishAsyncAction({ target: 'fetchTeamMembers', success, message }) as any);
-  if (success) dispatch(setMembers(Array.isArray(data) ? data : (data?.results ?? [])));
+  // GET /teams/members answers { members: [...], count } (the web app reads data.members)
+  if (success) dispatch(setMembers(data?.members ?? (Array.isArray(data) ? data : (data?.results ?? []))));
 };
 
 export const fetchTeamInvites = () => async (dispatch: AppDispatch) => {
   dispatch(startAsyncAction('fetchTeamInvites'));
   const { success, message, data } = await Fetch({ path: '/teams/invites' });
   dispatch(finishAsyncAction({ target: 'fetchTeamInvites', success, message }) as any);
-  if (success) dispatch(setInvites(Array.isArray(data) ? data : (data?.results ?? [])));
+  // GET /teams/invites answers { invites: [...] }
+  if (success) dispatch(setInvites(data?.invites ?? (Array.isArray(data) ? data : (data?.results ?? []))));
 };
 
 export const sendTeamInvite = () => async (dispatch: AppDispatch) => {

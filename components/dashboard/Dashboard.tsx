@@ -15,13 +15,14 @@ import { setActiveChartMonthIndex } from '@/store/reducers/misc';
 import { BRAND_PURPLE } from '@/constants/authTheme';
 import { CHART, DashboardTheme, useDashboardTheme } from '@/constants/dashboardTheme';
 import { BottomGlow } from '@/components/splash/BottomGlow';
+import { useMenu } from '@/components/menu/MenuContext';
 import { DonutChart } from './DonutChart';
 import { MonthlyStatusChart } from './MonthlyStatusChart';
 
 // Section sizes from the design, plus the requested +25pt on both chart sections.
-const ALL_PROJECTS_HEIGHT = 150;
-const MONTHLY_STATUS_HEIGHT = 160;
-const MONTHLY_PLOT_HEIGHT = 80; // the extra 25pt goes to the chart's plot area
+const ALL_PROJECTS_HEIGHT = 100 + 25;
+const MONTHLY_STATUS_HEIGHT = 136 + 25;
+const MONTHLY_PLOT_HEIGHT = 55 + 25; // the extra 25pt goes to the chart's plot area
 // How far the "All Projects" title (and its chevron) sits closer to the card's top border.
 // Only the title moves, so the donut and legend stay exactly where they were.
 const ALL_PROJECTS_TITLE_LIFT = 6;
@@ -103,6 +104,7 @@ export const Dashboard = () => {
   const dispatch = useAppDispatch();
   const theme = useDashboardTheme();
   const insets = useSafeAreaInsets();
+  const { openMenu } = useMenu();
   const { user } = useAppSelector((s) => s.account);
   const { projects } = useAppSelector((s) => s.project);
   const { chats } = useAppSelector((s) => s.chat);
@@ -171,7 +173,9 @@ export const Dashboard = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Image source={require('../../assets/splash-logo.png')} style={styles.logo} resizeMode="contain" />
+          <TouchableOpacity onPress={openMenu} activeOpacity={0.7} accessibilityLabel="Open menu">
+            <Image source={require('../../assets/splash-logo.png')} style={styles.logo} resizeMode="contain" />
+          </TouchableOpacity>
           <View style={styles.headerIcons}>
             <Ionicons name="search-outline" size={22} color={theme.text} />
             <View>

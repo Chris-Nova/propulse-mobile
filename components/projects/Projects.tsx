@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet,
-  TouchableOpacity, TextInput, RefreshControl
+  TouchableOpacity, TextInput, RefreshControl, Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -12,6 +13,12 @@ import { Card, EmptyState, Loader, Badge, SectionHeader } from '@/components/sha
 import Button from '@/components/shared/Button';
 import { COLORS, SIZES } from '@/constants/theme';
 import { Project, ProjectStatus } from '@/types';
+import { BRAND_PURPLE } from '@/constants/authTheme';
+import { StatusKey, useDashboardTheme } from '@/constants/dashboardTheme';
+import { formatDay } from '@/utils/format';
+import { AppHeader } from '@/components/shared/AppHeader';
+import { SearchField, FilterPills, Pagination, PageTitle } from '@/components/shared/ListControls';
+import { BottomGlow } from '@/components/splash/BottomGlow';
 
 const STATUS_CONFIG: Record<ProjectStatus, { color: string; bg: string; label: string }> = {
   pending: { color: COLORS.warning, bg: COLORS.warningLight, label: 'Pending' },
@@ -19,110 +26,182 @@ const STATUS_CONFIG: Record<ProjectStatus, { color: string; bg: string; label: s
   completed: { color: COLORS.success, bg: COLORS.successLight, label: 'Completed' },
 };
 
-// ─── Project Card ──────────────────────────────────────────
-const ProjectCard = ({ project, onPress }: { project: Project; onPress: () => void }) => {
-  const status = STATUS_CONFIG[project.status];
+// ─── Projects List ─────────────────────────────────────────
+const PAGE_SIZE = 5;
+type StatusFilter = 'all' | 'incomplete' | 'on_hold' | 'completed';
+
+const FILTERS: { label: string; value: StatusFilter }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'In Progress', value: 'incomplete' },
+  { label: 'On Hold', value: 'on_hold' },
+  { label: 'Completed', value: 'completed' },
+];
+
+const ProjectRow = ({ project, onPress, onMenu }: { project: Project; onPress: () => void; onMenu: () => void }) => {
+  const theme = useDashboardTheme();
+  const key = (['pending', 'incomplete', 'completed', 'on_hold'].includes(project.status as string)
+    ? project.status
+    : 'pending') as StatusKey;
+  const status = theme.status[key];
+  const tile = { pending: theme.palette.amber, incomplete: theme.palette.lavender, completed: theme.palette.mint, on_hold: theme.palette.pink }[key];
+  const progress = Math.max(0, Math.min(100, Math.round(project.progress ?? 0)));
+  const meta = (icon: string, text: string) => (
+    <View style={styles.metaRow}>
+      <Ionicons name={icon as any} size={12} color={theme.muted} />
+      <Text style={[styles.metaText, { color: theme.muted }]} numberOfLines={1}>{text}</Text>
+    </View>
+  );
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-      <Card style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.projectName} numberOfLines={1}>{project.name}</Text>
-          <Badge label={status.label} color={status.color} bgColor={status.bg + '33'} />
-        </View>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={[
+        styles.projCard,
+        { backgroundColor: theme.card, borderColor: theme.cardBorder },
+        theme.shadow && styles.projShadow,
+      ]}
+    >
+      <View style={[styles.projTile, { backgroundColor: tile.bg }]}>
+        <Ionicons name="folder-open-outline" size={18} color={tile.icon} />
+      </View>
 
-        <View style={styles.clientRow}>
-          <Ionicons name="person-outline" size={14} color={COLORS.textMuted} />
-          <Text style={styles.clientText}>{project.client_name || 'No client'}</Text>
-        </View>
+      <View style={{ flex: 1, gap: 5 }}>
+        <Text style={[styles.projName, { color: theme.text }]} numberOfLines={2}>{project.name}</Text>
+        {meta('person-outline', project.client_name || 'No client')}
+        {meta('people-outline', project.owner_name || '—')}
+        {meta('calendar-outline', project.end_date ? `Due: ${formatDay(project.end_date)}` : 'No due date')}
+      </View>
 
-        {/* Progress Bar */}
-        <View style={styles.progressSection}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressValue}>{project.progress}%</Text>
+      <View style={styles.projRight}>
+        <View style={styles.projTop}>
+          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.fg }]}>{status.label}</Text>
           </View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${project.progress}%` as any, backgroundColor: status.color }]} />
+          <TouchableOpacity onPress={onMenu} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Project actions">
+            <Ionicons name="ellipsis-vertical" size={15} color={theme.muted} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.progressRow}>
+          <Text style={[styles.progressPct, { color: theme.muted }]}>{progress}%</Text>
+          <View style={[styles.track, { backgroundColor: theme.scheme === 'light' ? '#EFEFEF' : 'rgba(255,255,255,0.14)' }]}>
+            <View style={[styles.fill, { width: `${progress}%`, backgroundColor: theme.accent }]} />
           </View>
         </View>
-
-        <View style={styles.cardFooter}>
-          <View style={styles.stat}>
-            <Ionicons name="flag-outline" size={14} color={COLORS.textMuted} />
-            <Text style={styles.statText}>{project.milestones?.length ?? 0} milestones</Text>
-          </View>
-          <View style={styles.stat}>
-            <Ionicons name="people-outline" size={14} color={COLORS.textMuted} />
-            <Text style={styles.statText}>{project.members?.length ?? 0} members</Text>
-          </View>
-        </View>
-      </Card>
+      </View>
     </TouchableOpacity>
   );
 };
 
-// ─── Projects List ─────────────────────────────────────────
 export const ProjectsList = () => {
   const dispatch = useAppDispatch();
+  const theme = useDashboardTheme();
   const { projects } = useAppSelector((s) => s.project);
   const { pending } = useAppSelector((s) => s.asyncActions.fetchProjects);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     dispatch(fetchProjects() as any);
   }, []);
 
-  if (pending && !projects.length) {
-    return <Loader pending fullScreen />;
-  }
+  // The projects endpoint returns everything at once, so search, filter and paging happen here.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return projects.filter((p) => {
+      if (filter !== 'all' && (p.status as string) !== filter) return false;
+      if (!q) return true;
+      return [p.name, p.client_name, p.owner_name].some((v) => (v ?? '').toLowerCase().includes(q));
+    });
+  }, [projects, search, filter]);
+
+  useEffect(() => { setPage(1); }, [search, filter]);
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const openMenu = (p: Project) => {
+    const buttons: any[] = [{ text: 'View', onPress: () => router.push(`/(app)/projects/${p.id}` as any) }];
+    if (p.permissions?.can_edit) {
+      buttons.push({ text: 'Edit', onPress: () => router.push(`/(app)/projects/${p.id}/edit` as any) });
+    }
+    if (p.permissions?.can_delete) {
+      buttons.push({
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Delete project', `Delete "${p.name}"? This cannot be undone.`, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteProject(p.id) as any) },
+          ]),
+      });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert(p.name, undefined, buttons);
+  };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <StatusBar style={theme.statusBar} />
+      {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <FlatList
-        data={projects}
+        data={pageItems}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.screenList}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl
-            refreshing={pending}
-            onRefresh={() => dispatch(fetchProjects() as any)}
-            tintColor={COLORS.primary}
-          />
+          <RefreshControl refreshing={pending} onRefresh={() => dispatch(fetchProjects() as any)} tintColor={BRAND_PURPLE} />
         }
         ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <SectionHeader
-              title={`Projects (${projects.length})`}
-              action={
-                <Button
-                  onPress={() => router.push('/(app)/projects/create')}
-                  size="small"
-                >
-                  + New
-                </Button>
-              }
-            />
+          <View>
+            <AppHeader />
+            <View style={styles.titleRow}>
+              <View style={[styles.titleIcon, { backgroundColor: theme.field }]}>
+                <Ionicons name="folder-open-outline" size={20} color={BRAND_PURPLE} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <PageTitle
+                  title="Projects"
+                  subtitle="View and manage your projects, track progress and stay on top of deadlines."
+                />
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push('/(app)/projects/create' as any)}
+                activeOpacity={0.85}
+                style={styles.newBtn}
+              >
+                <Ionicons name="add" size={16} color="#FFFFFF" />
+                <Text style={styles.newBtnText}>New Project</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ marginTop: 16 }}>
+              <SearchField value={search} onChangeText={setSearch} placeholder="Search projects by name, client or manager..." />
+            </View>
+            <View style={{ marginTop: 14, marginBottom: 14 }}>
+              <FilterPills options={FILTERS} value={filter} onChange={setFilter} />
+            </View>
           </View>
         }
         ListEmptyComponent={
-          <EmptyState
-            icon="folder-open-outline"
-            title="No projects yet"
-            message="Create your first project to get started"
-            action={
-              <Button onPress={() => router.push('/(app)/projects/create')} style={{ marginTop: SIZES.md }}>
-                Create Project
-              </Button>
-            }
-          />
+          <Text style={[styles.emptyText, { color: theme.muted }]}>
+            {pending
+              ? 'Loading projects…'
+              : projects.length === 0
+                ? 'No projects yet. Tap New Project to create your first one.'
+                : 'No projects match your search or filter.'}
+          </Text>
         }
+        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         renderItem={({ item }) => (
-          <ProjectCard
+          <ProjectRow
             project={item}
-            onPress={() => router.push(`/(app)/projects/${item.id}`)}
+            onPress={() => router.push(`/(app)/projects/${item.id}` as any)}
+            onMenu={() => openMenu(item)}
           />
         )}
+        ListFooterComponent={
+          <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} variant="numbers" />
+        }
       />
     </View>
   );
@@ -193,6 +272,31 @@ export const CreateProject = () => {
 };
 
 const styles = StyleSheet.create({
+  screenList: { paddingHorizontal: 16, paddingBottom: 28, flexGrow: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 20 },
+  titleIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  newBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 12,
+    borderRadius: 10, backgroundColor: BRAND_PURPLE,
+  },
+  newBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  emptyText: { textAlign: 'center', fontSize: 13, marginTop: 40, paddingHorizontal: 24 },
+  projCard: { flexDirection: 'row', gap: 12, borderRadius: 12, borderWidth: 1, padding: 12 },
+  projShadow: {
+    shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  projTile: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  projName: { fontSize: 12.5, fontWeight: '700' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText: { fontSize: 10, flexShrink: 1 },
+  projRight: { alignItems: 'flex-end', justifyContent: 'space-between', minWidth: 112 },
+  projTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusPill: { paddingHorizontal: 10, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  statusText: { fontSize: 9.5, fontWeight: '500' },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  progressPct: { fontSize: 9.5, minWidth: 26, textAlign: 'right' },
+  track: { width: 62, height: 5, borderRadius: 3, overflow: 'hidden' },
+  fill: { height: 5, borderRadius: 3 },
   list: { padding: SIZES.md, gap: SIZES.sm, flexGrow: 1 },
   listHeader: { marginBottom: SIZES.sm },
   card: { marginBottom: 0 },

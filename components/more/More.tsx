@@ -11,7 +11,7 @@ import { useDashboardTheme } from '@/constants/dashboardTheme';
 import { PRIVACY_URL, SUPPORT_EMAIL, TERMS_URL } from '@/constants/links';
 import { BottomGlow } from '@/components/splash/BottomGlow';
 
-type Row = { label: string; onPress: () => void };
+type Row = { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void };
 
 export const More = () => {
   const dispatch = useAppDispatch();
@@ -22,12 +22,12 @@ export const More = () => {
   const open = (url: string) => Linking.openURL(url).catch(() => {});
 
   const rows: Row[] = [
-    { label: 'Documents', onPress: () => router.push('/(app)/documents' as any) },
-    { label: 'Analytics', onPress: () => router.push('/(app)/analytics' as any) },
-    { label: 'Settings', onPress: () => router.push('/(app)/account' as any) },
-    { label: 'Help & Support', onPress: () => open(`mailto:${SUPPORT_EMAIL}`) },
-    { label: 'Privacy Policy', onPress: () => open(PRIVACY_URL) },
-    { label: 'Terms of Service', onPress: () => open(TERMS_URL) },
+    { label: 'Documents', icon: 'document-text-outline', onPress: () => router.push('/(app)/documents' as any) },
+    { label: 'Analytics', icon: 'bar-chart-outline', onPress: () => router.push('/(app)/analytics' as any) },
+    { label: 'Settings', icon: 'settings-outline', onPress: () => router.push('/(app)/account' as any) },
+    { label: 'Help & Support', icon: 'help-circle-outline', onPress: () => open(`mailto:${SUPPORT_EMAIL}`) },
+    { label: 'Privacy Policy', icon: 'shield-checkmark-outline', onPress: () => open(PRIVACY_URL) },
+    { label: 'Terms of Service', icon: 'clipboard-outline', onPress: () => open(TERMS_URL) },
   ];
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(app)/dashboard' as any));
@@ -63,8 +63,7 @@ export const More = () => {
         <View style={styles.list}>
           {rows.map((r) => (
             <TouchableOpacity key={r.label} onPress={r.onPress} activeOpacity={0.6} style={styles.row}>
-              {/* The design uses a padlock on every row */}
-              <Ionicons name="lock-closed-outline" size={16} color={light ? BRAND_PURPLE : theme.tabBar.active} />
+              <Ionicons name={r.icon} size={22} color={light ? BRAND_PURPLE : theme.tabBar.active} />
               <Text style={[styles.label, { color: theme.text }]}>{r.label}</Text>
               <Ionicons name="chevron-forward" size={14} color={light ? '#909090' : theme.muted} />
             </TouchableOpacity>
@@ -96,8 +95,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginLeft: 8 },
   title: { fontSize: 22, fontWeight: '700' },
   list: { marginTop: 36 },
-  row: { flexDirection: 'row', alignItems: 'center', height: 63, paddingLeft: 36, paddingRight: 28 },
-  label: { flex: 1, fontSize: 15, fontWeight: '600', marginLeft: 26 },
+  row: { flexDirection: 'row', alignItems: 'center', height: 63, paddingLeft: 30, paddingRight: 28 },
+  label: { flex: 1, fontSize: 15, fontWeight: '600', marginLeft: 22 },
   logout: {
     height: 36, marginHorizontal: 25, borderRadius: 10, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center',

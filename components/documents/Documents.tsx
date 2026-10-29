@@ -1,39 +1,55 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, RefreshControl, Linking, Alert
+  View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Linking, Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchDocuments, fetchProjectDocuments, downloadDocument } from '@/store/slices/documents';
-import { Card, EmptyState, Loader, SectionHeader, Badge } from '@/components/shared';
-import { COLORS, SIZES } from '@/constants/theme';
 import { Document } from '@/types';
+import { BRAND_PURPLE } from '@/constants/authTheme';
+import { Tint, useDashboardTheme } from '@/constants/dashboardTheme';
+import { formatShort } from '@/utils/format';
+import { AppHeader } from '@/components/shared/AppHeader';
+import { SearchField, Pagination, PageTitle } from '@/components/shared/ListControls';
+import { BottomGlow } from '@/components/splash/BottomGlow';
 
-const TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  pdf: 'document-text',
-  doc: 'document',
-  docx: 'document',
-  png: 'image',
-  jpg: 'image',
-  jpeg: 'image',
-  xls: 'grid',
-  xlsx: 'grid',
-  csv: 'list',
-  mp4: 'videocam',
-  mov: 'videocam',
+const PAGE_SIZE = 10;
+
+const MIME_LABELS: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'application/msword': 'DOC',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.ms-excel': 'XLS',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+  'application/vnd.ms-powerpoint': 'PPT',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+  'text/plain': 'TXT',
+  'text/csv': 'CSV',
+  'application/zip': 'ZIP',
 };
 
-const getIcon = (mimeType: string): keyof typeof Ionicons.glyphMap => {
-  const ext = mimeType?.split('/')?.[1]?.toLowerCase() ?? '';
-  return TYPE_ICONS[ext] ?? 'document-outline';
+// Short label for the type pill: the file extension if there is one ("plan.dxf" -> "DXF"),
+// otherwise a known mime type, otherwise a short mime subtype, otherwise "FILE".
+// Long values such as "vnd.openxmlformats-officedocument..." must never reach the pill.
+const extensionOf = (d: Document) => {
+  const m = d.document_name?.match(/\.([A-Za-z0-9]{1,5})$/);
+  if (m) return m[1].toUpperCase();
+  const mime = (d.mime_type ?? '').toLowerCase();
+  if (MIME_LABELS[mime]) return MIME_LABELS[mime];
+  const sub = mime.split('/')[1]?.split(/[.+-]/).pop() ?? '';
+  if (sub && sub.length <= 5) return sub.toUpperCase();
+  const t = (d.type ?? '').toUpperCase();
+  return t && t.length <= 5 ? t : 'FILE';
 };
 
-const formatDate = (iso: string) => {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-  });
+const iconFor = (ext: string): { icon: keyof typeof Ionicons.glyphMap; tone: 'pink' | 'lavender' | 'mint' | 'amber' | 'blue' } => {
+  if (ext === 'PDF') return { icon: 'document-text-outline', tone: 'pink' };
+  if (['DXF', 'DWG'].includes(ext)) return { icon: 'link-outline', tone: 'lavender' };
+  if (['DOC', 'DOCX', 'TXT'].includes(ext)) return { icon: 'document-text-outline', tone: 'blue' };
+  if (['XLS', 'XLSX', 'CSV'].includes(ext)) return { icon: 'grid-outline', tone: 'mint' };
+  if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP'].includes(ext)) return { icon: 'image-outline', tone: 'amber' };
+  return { icon: 'document-outline', tone: 'lavender' };
 };
 
 interface DocumentsListProps {
@@ -42,202 +58,158 @@ interface DocumentsListProps {
 
 export const DocumentsList: React.FC<DocumentsListProps> = ({ projectId }) => {
   const dispatch = useAppDispatch();
+  const theme = useDashboardTheme();
   const { documents } = useAppSelector((s) => s.document);
   const { pending: fetchingAll } = useAppSelector((s) => s.asyncActions.fetchDocuments);
   const { pending: fetchingProject } = useAppSelector((s) => s.asyncActions.fetchProjectDocuments);
   const pending = projectId ? fetchingProject : fetchingAll;
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (projectId) {
-      dispatch(fetchProjectDocuments(projectId) as any);
-    } else {
-      dispatch(fetchDocuments() as any);
-    }
-  }, [projectId]);
+  const reload = () =>
+    projectId ? dispatch(fetchProjectDocuments(projectId) as any) : dispatch(fetchDocuments() as any);
 
-  const filtered = documents.filter((d) => {
-    const q = search.toLowerCase();
-    return (
-      d.document_name?.toLowerCase().includes(q) ||
-      d.type?.toLowerCase().includes(q) ||
-      d.project_name?.toLowerCase().includes(q) ||
-      d.description?.toLowerCase().includes(q)
+  useEffect(() => { reload(); }, [projectId]);
+  useEffect(() => { setPage(1); }, [search]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return documents;
+    return documents.filter(
+      (d) =>
+        d.document_name?.toLowerCase().includes(q) ||
+        d.type?.toLowerCase().includes(q) ||
+        d.project_name?.toLowerCase().includes(q) ||
+        d.description?.toLowerCase().includes(q)
     );
-  });
+  }, [documents, search]);
+
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleDownload = async (doc: Document) => {
     setDownloading(doc.id);
     try {
       const ok = await downloadDocument(doc.file_url, doc.document_name);
-      if (!ok) {
-        Alert.alert('Error', 'Could not download file. Try opening it in your browser.');
-      }
+      if (!ok) Alert.alert('Error', 'Could not download file. Try opening it in your browser.');
     } finally {
       setDownloading(null);
     }
   };
 
   const handleView = (doc: Document) => {
-    Linking.openURL(doc.file_url).catch(() =>
-      Alert.alert('Error', 'Unable to open this file.')
-    );
+    Linking.openURL(doc.file_url).catch(() => Alert.alert('Error', 'Unable to open this file.'));
   };
 
-  if (pending && !documents.length) return <Loader pending fullScreen />;
+  const tintOf = (tone: string): Tint => (theme.palette as any)[tone];
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Search bar */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search-outline" size={18} color={COLORS.textMuted} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name, type, project..."
-          placeholderTextColor={COLORS.textMuted}
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <StatusBar style={theme.statusBar} />
+      {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <FlatList
-        data={filtered}
+        data={pageItems}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.screenList}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={pending}
-            onRefresh={() =>
-              projectId
-                ? dispatch(fetchProjectDocuments(projectId) as any)
-                : dispatch(fetchDocuments() as any)
-            }
-            tintColor={COLORS.primary}
-          />
-        }
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={pending} onRefresh={reload} tintColor={BRAND_PURPLE} />}
         ListHeaderComponent={
-          <SectionHeader title={`Documents (${filtered.length})`} />
+          <View>
+            {!projectId && <AppHeader />}
+            {!projectId && (
+              <View style={{ marginTop: 20 }}>
+                <PageTitle
+                  title="Documents"
+                  subtitle="Manage your document and files. View, edit or delete them anytime."
+                />
+              </View>
+            )}
+            <View style={{ marginTop: 16, marginBottom: 16 }}>
+              <SearchField value={search} onChangeText={setSearch} placeholder="Search documents by name..." />
+            </View>
+          </View>
         }
         ListEmptyComponent={
-          <EmptyState
-            icon="folder-open-outline"
-            title="No documents found"
-            message={search ? 'Try a different search term.' : 'No documents have been uploaded yet.'}
-          />
+          <Text style={[styles.emptyText, { color: theme.muted }]}>
+            {pending
+              ? 'Loading documents…'
+              : search
+                ? 'No documents match your search.'
+                : 'No documents have been uploaded yet.'}
+          </Text>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const ext = extensionOf(item);
+          const { icon, tone } = iconFor(ext);
+          const tint = tintOf(tone);
           const isDownloading = downloading === item.id;
-          const ext = item.mime_type?.split('/')?.[1]?.toUpperCase() ?? item.type?.toUpperCase() ?? '—';
-
           return (
-            <Card style={styles.docCard}>
-              {/* Icon */}
-              <View style={styles.iconWrap}>
-                <Ionicons name={getIcon(item.mime_type)} size={28} color={COLORS.primary} />
+            <View
+              style={[
+                styles.docRow,
+                { backgroundColor: theme.card, borderColor: theme.cardBorder },
+                index === 0 && styles.firstRow,
+                index === pageItems.length - 1 && styles.lastRow,
+                index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.divider },
+              ]}
+            >
+              <View style={[styles.docTile, { backgroundColor: tint.bg }]}>
+                <Ionicons name={icon} size={18} color={tint.icon} />
               </View>
-
-              {/* Info */}
-              <View style={styles.docInfo}>
-                <Text style={styles.docName} numberOfLines={2}>{item.document_name}</Text>
-                <View style={styles.docMeta}>
-                  <Badge label={ext} color={COLORS.primary} bgColor={COLORS.infoLight + '33'} />
-                  {item.file_size_formatted && (
-                    <Text style={styles.metaText}>{item.file_size_formatted}</Text>
-                  )}
-                  {item.project_name && (
-                    <Text style={styles.metaText} numberOfLines={1}>{item.project_name}</Text>
-                  )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.docName, { color: theme.text }]} numberOfLines={3}>{item.document_name}</Text>
+                <Text style={[styles.docDate, { color: theme.muted }]}>
+                  {formatShort(item.date_uploaded || item.created_at)}
+                </Text>
+              </View>
+              <View style={styles.docRight}>
+                <View style={styles.pillRow}>
+                  <View style={[styles.typePill, { backgroundColor: theme.field }]}>
+                    <Text style={[styles.typeText, { color: theme.accent }]} numberOfLines={1}>{ext}</Text>
+                  </View>
+                  <Text style={[styles.sizeText, { color: theme.muted }]}>{item.file_size_formatted || '-'}</Text>
                 </View>
-                <Text style={styles.metaDate}>{formatDate(item.date_uploaded || item.created_at)}</Text>
+                <View style={styles.actions}>
+                  <TouchableOpacity onPress={() => handleView(item)} style={styles.action}>
+                    <Ionicons name="eye-outline" size={13} color={BRAND_PURPLE} />
+                    <Text style={styles.actionText}>View</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDownload(item)} disabled={isDownloading} style={styles.action}>
+                    <Ionicons name="download-outline" size={13} color={BRAND_PURPLE} />
+                    <Text style={styles.actionText}>{isDownloading ? 'Saving…' : 'Download'}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-
-              {/* Actions */}
-              <View style={styles.docActions}>
-                <TouchableOpacity onPress={() => handleView(item)} style={styles.actionBtn}>
-                  <Ionicons name="eye-outline" size={20} color={COLORS.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => handleDownload(item)}
-                  disabled={isDownloading}
-                  style={styles.actionBtn}
-                >
-                  <Ionicons
-                    name={isDownloading ? 'cloud-download' : 'download-outline'}
-                    size={20}
-                    color={isDownloading ? COLORS.textMuted : COLORS.success}
-                  />
-                </TouchableOpacity>
-              </View>
-            </Card>
+            </View>
           );
         }}
+        ListFooterComponent={
+          <Pagination page={page} pageSize={PAGE_SIZE} total={filtered.length} onChange={setPage} variant="prevnext" />
+        }
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SIZES.sm,
-    margin: SIZES.md,
-    marginBottom: 0,
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: SIZES.radiusMd,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: SIZES.md,
-    height: 44,
+  screenList: { paddingHorizontal: 16, paddingBottom: 28, flexGrow: 1 },
+  emptyText: { textAlign: 'center', fontSize: 13, marginTop: 40, paddingHorizontal: 24 },
+  docRow: {
+    flexDirection: 'row', gap: 12, padding: 14, borderLeftWidth: 1, borderRightWidth: 1,
   },
-  searchInput: {
-    flex: 1,
-    color: COLORS.textPrimary,
-    fontSize: SIZES.body,
-  },
-  list: {
-    padding: SIZES.md,
-    gap: SIZES.sm,
-    flexGrow: 1,
-  },
-  docCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SIZES.md,
-  },
-  iconWrap: {
-    width: 48, height: 48,
-    borderRadius: SIZES.radiusMd,
-    backgroundColor: COLORS.infoLight + '22',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docInfo: { flex: 1, gap: 3 },
-  docName: {
-    color: COLORS.textPrimary,
-    fontSize: SIZES.body,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  docMeta: { flexDirection: 'row', alignItems: 'center', gap: SIZES.xs, flexWrap: 'wrap' },
-  metaText: { color: COLORS.textMuted, fontSize: SIZES.caption },
-  metaDate: { color: COLORS.textMuted, fontSize: SIZES.caption, marginTop: 2 },
-  docActions: { gap: SIZES.xs },
-  actionBtn: {
-    width: 36, height: 36,
-    borderRadius: SIZES.radiusMd,
-    backgroundColor: COLORS.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  firstRow: { borderTopWidth: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
+  lastRow: { borderBottomWidth: 1, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
+  docTile: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  docName: { fontSize: 11.5, fontWeight: '600', lineHeight: 15 },
+  docDate: { fontSize: 9.5, marginTop: 6 },
+  docRight: { alignItems: 'flex-end', justifyContent: 'space-between', gap: 14, flexShrink: 0 },
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  typePill: { paddingHorizontal: 11, height: 24, maxWidth: 70, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  typeText: { fontSize: 10, fontWeight: '700' },
+  sizeText: { fontSize: 11, minWidth: 14, textAlign: 'right', flexShrink: 0 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionText: { color: BRAND_PURPLE, fontSize: 10, fontWeight: '500' },
 });
-
-export default DocumentsList;

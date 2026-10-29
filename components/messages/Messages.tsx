@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
-  fetchChats, fetchMessages, sendMessage, createChat, deleteMessage, editMessage,
+  fetchChats, fetchMessages, sendMessage, createChat, deleteMessage, editMessage, deleteChat,
   connectSocket, disconnectSocket,
 } from '@/store/slices/chat';
 import { fetchTeamMembers } from '@/store/slices/teams';
@@ -16,6 +16,14 @@ import { setActiveChatId, setMessageText, setMessageReplyTo, setEditedMessage, r
 import { EmptyState, Loader, SectionHeader } from '@/components/shared';
 import { COLORS, SIZES } from '@/constants/theme';
 import { Chat, ChatMessage, TeamMember, ChatFilters } from '@/types';
+import { StatusBar } from 'expo-status-bar';
+import { BRAND_PURPLE } from '@/constants/authTheme';
+import { useDashboardTheme } from '@/constants/dashboardTheme';
+import { formatStamp, initialOf } from '@/utils/format';
+import { AppHeader } from '@/components/shared/AppHeader';
+import { SearchField, FilterPills, PageTitle } from '@/components/shared/ListControls';
+import { BottomGlow } from '@/components/splash/BottomGlow';
+import { setConversationPinned } from './pin';
 
 // Presents Reply/Edit/Delete on a long-pressed message bubble, cross-platform.
 const showMessageActions = (options: { onReply: () => void; onEdit?: () => void; onDelete?: () => void }) => {
@@ -292,16 +300,12 @@ const FILTER_TABS: { label: string; value: ChatFilters | 'all' }[] = [
 
 export const ChatList = () => {
   const dispatch = useAppDispatch();
+  const theme = useDashboardTheme();
   const { chats, activeChatsFilter } = useAppSelector((s) => s.chat);
   const { user } = useAppSelector((s) => s.account);
   const { pending } = useAppSelector((s) => s.asyncActions.fetchChats);
   const [showModal, setShowModal] = useState(false);
-
-  const chatList = Object.values(chats).sort((a, b) => {
-    const aTime = a.last_message?.created_at ?? '';
-    const bTime = b.last_message?.created_at ?? '';
-    return bTime.localeCompare(aTime);
-  });
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     dispatch(fetchChats(ChatFilters.ALL) as any);
@@ -309,98 +313,160 @@ export const ChatList = () => {
     return () => { dispatch(disconnectSocket() as any); };
   }, []);
 
-  const onSelectFilter = (filter: ChatFilters | 'all') => {
-    dispatch(fetchChats(filter === 'all' ? ChatFilters.ALL : filter) as any);
-  };
-
   const getOtherParticipant = (chat: Chat) =>
     chat.participants?.find((p) => p.id !== user?.id) ?? chat.participants?.[0];
 
-  if (pending && !chatList.length) return <Loader pending fullScreen />;
+  const nameOf = (chat: Chat) =>
+    chat.room?.name ?? getOtherParticipant(chat)?.name ?? 'Unknown';
+
+  // Pinned (starred) conversations first, then newest activity
+  const chatList = Object.values(chats)
+    .filter((c) => {
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      return nameOf(c).toLowerCase().includes(q) || (c.last_message?.text ?? '').toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      const pa = (a as any).is_pinned ? 1 : 0;
+      const pb = (b as any).is_pinned ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return (b.last_message?.created_at ?? '').localeCompare(a.last_message?.created_at ?? '');
+    });
+
+  const palette = [theme.palette.lavender, theme.palette.mint, theme.palette.blue, theme.palette.pink];
+  const tintFor = (id: string) => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return palette[h % palette.length];
+  };
+
+  const openActions = (chat: Chat) => {
+    const pinned = !!(chat as any).is_pinned;
+    Alert.alert(nameOf(chat), undefined, [
+      {
+        text: pinned ? 'Unstar' : 'Star',
+        onPress: () => dispatch(setConversationPinned(chat.id, !pinned) as any),
+      },
+      {
+        text: 'Delete conversation',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Delete conversation', 'This cannot be undone.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteChat(chat.id) as any) },
+          ]),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const filterOptions = [
+    { label: 'All', value: ChatFilters.ALL },
+    { label: 'Direct Message', value: ChatFilters.DIRECT_MESSAGE },
+    { label: 'Unread', value: ChatFilters.UNREAD },
+    { label: 'Room', value: ChatFilters.ROOM },
+  ];
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      <StatusBar style={theme.statusBar} />
+      {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <FlatList
         data={chatList}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={styles.screenList}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          <>
-            <View style={styles.listHeader}>
-              <Text style={styles.listTitle}>Messages</Text>
-              <TouchableOpacity onPress={() => setShowModal(true)} style={styles.newBtn}>
-                <Ionicons name="create-outline" size={22} color={COLORS.primary} />
+          <View>
+            <AppHeader />
+            <View style={styles.titleRow}>
+              <PageTitle title="Messages" />
+              <TouchableOpacity
+                onPress={() => setShowModal(true)}
+                style={[styles.composeBtn, { backgroundColor: theme.field }]}
+                accessibilityLabel="New conversation"
+              >
+                <Ionicons name="create-outline" size={20} color={BRAND_PURPLE} />
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-              {FILTER_TABS.map((tab) => {
-                const isActive = (activeChatsFilter ?? 'all') === tab.value;
-                return (
-                  <TouchableOpacity
-                    key={tab.value}
-                    onPress={() => onSelectFilter(tab.value)}
-                    style={[styles.filterChip, isActive && styles.filterChipActive]}
-                  >
-                    <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </>
+            <View style={{ marginTop: 18 }}>
+              <SearchField value={search} onChangeText={setSearch} placeholder="Search" />
+            </View>
+            <View style={{ marginTop: 14, marginBottom: 16 }}>
+              <FilterPills
+                options={filterOptions}
+                value={(activeChatsFilter ?? ChatFilters.ALL) as ChatFilters}
+                onChange={(f) => dispatch(fetchChats(f) as any)}
+              />
+            </View>
+            <View style={[styles.hairline, { backgroundColor: theme.divider }]} />
+          </View>
         }
         ListEmptyComponent={
-          <EmptyState
-            icon="chatbubbles-outline"
-            title="No conversations yet"
-            message="Tap the compose icon to start a new chat"
-          />
+          pending ? (
+            <Text style={[styles.empty, { color: theme.muted }]}>Loading conversations…</Text>
+          ) : (
+            <Text style={[styles.empty, { color: theme.muted }]}>
+              {search ? 'No conversations match your search.' : 'No conversations yet. Tap the compose icon to start one.'}
+            </Text>
+          )
         }
         renderItem={({ item }) => {
-          const isGroup = !!item.room;
-          const other = isGroup ? null : getOtherParticipant(item);
-          const name = item.room?.name ?? other?.name ?? 'Unknown';
+          const name = nameOf(item);
+          const tint = tintFor(item.id);
           const lastMsg = item.last_message;
           const unreadCount = item.unread_count ?? 0;
-          const isUnread = unreadCount > 0;
-
+          const pinned = !!(item as any).is_pinned;
           return (
             <TouchableOpacity
               onPress={() => {
                 dispatch(setActiveChatId(item.id));
                 router.push(`/(app)/messages/${item.id}` as any);
               }}
-              activeOpacity={0.8}
+              activeOpacity={0.7}
+              style={[styles.msgRow, { borderBottomColor: theme.divider }]}
             >
-              <View style={styles.chatRow}>
-                <View style={styles.avatarWrapper}>
-                  <Avatar name={name} size={48} />
-                  {isGroup && (
-                    <View style={styles.groupBadge}>
-                      <Ionicons name="people" size={10} color={COLORS.white} />
+              <View style={[styles.rowAvatar, { backgroundColor: tint.bg }]}>
+                <Text style={{ color: tint.icon, fontSize: 15, fontWeight: '600' }}>{initialOf(name)}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.msgName, { color: theme.text }, unreadCount > 0 && { fontWeight: '800' }]} numberOfLines={2}>
+                  {name}
+                </Text>
+                <Text style={[styles.msgPreview, { color: theme.muted }]} numberOfLines={1}>
+                  {lastMsg?.is_deleted ? 'This message was deleted' : (lastMsg?.text ?? 'No messages yet')}
+                </Text>
+              </View>
+              <View style={styles.msgRight}>
+                <View style={styles.msgIcons}>
+                  <TouchableOpacity
+                    onPress={() => dispatch(setConversationPinned(item.id, !pinned) as any)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={pinned ? 'Unstar conversation' : 'Star conversation'}
+                  >
+                    <Ionicons
+                      name={pinned ? 'star' : 'star-outline'}
+                      size={14}
+                      color={pinned ? theme.accent : theme.placeholder}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => openActions(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel="More actions"
+                  >
+                    <Ionicons name="ellipsis-vertical" size={14} color={theme.muted} />
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {unreadCount > 0 && (
+                    <View style={styles.msgBadge}>
+                      <Text style={styles.msgBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
                     </View>
                   )}
+                  {!!lastMsg && <Text style={[styles.msgTime, { color: theme.muted }]}>{formatStamp(lastMsg.created_at)}</Text>}
                 </View>
-                <View style={styles.chatInfo}>
-                  <View style={styles.chatMeta}>
-                    <Text style={[styles.chatName, isUnread && styles.chatNameUnread]} numberOfLines={1}>
-                      {name}
-                    </Text>
-                    {lastMsg && (
-                      <Text style={styles.chatTime}>{formatTime(lastMsg.created_at)}</Text>
-                    )}
-                  </View>
-                  <Text style={[styles.lastMessage, isUnread && styles.lastMessageUnread]} numberOfLines={1}>
-                    {lastMsg?.is_deleted ? 'This message was deleted' : (lastMsg?.text ?? 'No messages yet')}
-                  </Text>
-                </View>
-                {isUnread && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
-                  </View>
-                )}
               </View>
             </TouchableOpacity>
           );
@@ -583,6 +649,27 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
 };
 
 const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  screenList: { paddingHorizontal: 16, paddingBottom: 28 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 },
+  composeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  hairline: { height: StyleSheet.hairlineWidth },
+  empty: { textAlign: 'center', fontSize: 13, marginTop: 40, paddingHorizontal: 24 },
+  msgRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 4,
+  },
+  rowAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  msgName: { fontSize: 14, fontWeight: '600', lineHeight: 18 },
+  msgPreview: { fontSize: 10.5, marginTop: 3 },
+  msgRight: { alignItems: 'flex-end', gap: 8 },
+  msgIcons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  msgTime: { fontSize: 9.5 },
+  msgBadge: {
+    minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 5,
+    backgroundColor: BRAND_PURPLE, alignItems: 'center', justifyContent: 'center',
+  },
+  msgBadgeText: { color: '#FFFFFF', fontSize: 9.5, fontWeight: '700' },
   list: { flexGrow: 1, paddingBottom: SIZES.xl },
   listHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
