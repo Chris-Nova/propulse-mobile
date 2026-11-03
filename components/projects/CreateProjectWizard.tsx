@@ -4,7 +4,7 @@ import {
   TouchableOpacity, Modal, Pressable, Alert, ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -177,7 +177,7 @@ export const CreateProjectWizard = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView

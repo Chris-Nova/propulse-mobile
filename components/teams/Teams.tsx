@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, ActivityIndicator,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { router } from 'expo-router';
@@ -214,7 +214,7 @@ export const Teams = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <ScrollView
         contentContainerStyle={styles.screenList}

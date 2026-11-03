@@ -2,7 +2,7 @@ import React from 'react';
 import {
   View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import Svg, { Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { AuthTheme, BRAND_PURPLE, useAuthTheme } from '@/constants/authTheme';
 import { BottomGlow } from '@/components/splash/BottomGlow';
@@ -57,7 +57,7 @@ export const AuthShell = ({ children, solidShape }: AuthShellProps) => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <TopShape theme={theme} solid={solidShape && theme.scheme === 'dark'} />
 

@@ -1,6 +1,6 @@
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Analytics } from '@/components/analytics/Analytics';
-import { COLORS } from '@/constants/theme';
+
+// Analytics paints its own themed background, header and status bar.
 export default function AnalyticsPage() {
-  return <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}><Analytics /></SafeAreaView>;
+  return <Analytics />;
 }

@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AUTH_FONT, BRAND_PURPLE, useAuthTheme } from '@/constants/authTheme';
@@ -25,7 +25,7 @@ export const AuthSheetShell = ({ title, intro, children }: Props) => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.sheetBackground }]}>
-      <StatusBar style="light" />
+      <ThemedStatusBar style="light" />
 
       {/* Header: its bottom 30pt tucks under the sheet's rounded corners */}
       <View style={[styles.header, { paddingTop: insets.top + 54, height: insets.top + 191 }]}>

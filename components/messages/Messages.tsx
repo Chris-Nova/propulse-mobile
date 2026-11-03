@@ -16,7 +16,7 @@ import { setActiveChatId, setMessageText, setMessageReplyTo, setEditedMessage, r
 import { EmptyState, Loader, SectionHeader } from '@/components/shared';
 import { COLORS, SIZES } from '@/constants/theme';
 import { Chat, ChatMessage, TeamMember, ChatFilters } from '@/types';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { BRAND_PURPLE } from '@/constants/authTheme';
 import { useDashboardTheme } from '@/constants/dashboardTheme';
 import { formatStamp, initialOf } from '@/utils/format';
@@ -369,7 +369,7 @@ export const ChatList = () => {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <FlatList
         data={chatList}

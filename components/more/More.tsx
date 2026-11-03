@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch } from '@/store/hooks';
@@ -41,7 +41,7 @@ export const More = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
 
       <ScrollView

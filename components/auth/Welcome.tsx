@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, useColorScheme, useWindowDimensions,
 } from 'react-native';
 import { Link } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { useAppDispatch } from '@/store/hooks';
 import { signInWithGoogle } from '@/store/slices/auth';
 import { AUTH_FONT, BRAND_PURPLE } from '@/constants/authTheme';
@@ -24,7 +24,7 @@ const Welcome = () => {
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
       {/* White status-bar icons read better on both the purple and black versions */}
-      <StatusBar style="light" />
+      <ThemedStatusBar style="light" />
       <BottomGlow color={theme.glow} opacity={0.25} />
 
       <View style={[styles.content, { paddingBottom: height * 0.12 }]}>

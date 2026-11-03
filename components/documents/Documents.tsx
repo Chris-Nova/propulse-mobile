@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity, RefreshControl, Linking, Alert,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchDocuments, fetchProjectDocuments, downloadDocument } from '@/store/slices/documents';
@@ -106,7 +106,7 @@ export const DocumentsList: React.FC<DocumentsListProps> = ({ projectId }) => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <FlatList
         data={pageItems}

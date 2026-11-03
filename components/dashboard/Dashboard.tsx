@@ -3,7 +3,7 @@ import {
   View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -164,7 +164,7 @@ export const Dashboard = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
-      <StatusBar style={theme.statusBar} />
+      <ThemedStatusBar style={theme.statusBar} />
       {theme.glow && <BottomGlow color={BRAND_PURPLE} opacity={0.22} />}
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 14 }]}

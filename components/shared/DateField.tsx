@@ -15,11 +15,12 @@ interface Props {
   onChange: (iso: string) => void;
   placeholder?: string;
   minDate?: string; // YYYY-MM-DD, earlier days are disabled
+  maxDate?: string; // YYYY-MM-DD, later days are disabled
   invalid?: boolean;
 }
 
 // Bordered date field (calendar icon, formatted date, chevron) that opens a month calendar.
-export const DateField = ({ value, onChange, placeholder = 'Select date', minDate, invalid }: Props) => {
+export const DateField = ({ value, onChange, placeholder = 'Select date', minDate, maxDate, invalid }: Props) => {
   const theme = useDashboardTheme();
   const light = theme.scheme === 'light';
   const [open, setOpen] = useState(false);
@@ -74,7 +75,7 @@ export const DateField = ({ value, onChange, placeholder = 'Select date', minDat
                 {cells.slice(r * 7, r * 7 + 7).map((day, i) => {
                   if (!day) return <View key={i} style={styles.cell} />;
                   const iso = toIso(new Date(cursor.getFullYear(), cursor.getMonth(), day));
-                  const disabled = !!minDate && iso < minDate;
+                  const disabled = (!!minDate && iso < minDate) || (!!maxDate && iso > maxDate);
                   const selected = iso === value;
                   return (
                     <TouchableOpacity
