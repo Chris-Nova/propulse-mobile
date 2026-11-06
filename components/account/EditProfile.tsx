@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator 
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchCompanyProfile, saveProfileDetails } from '@/store/slices/teams';
+import { fetchCompanyDetails, saveProfileDetails } from '@/store/slices/teams';
 import { BRAND_PURPLE } from '@/constants/authTheme';
 import { initialOf } from '@/utils/format';
 import { GradientAvatar } from '@/components/shared/GradientAvatar';
@@ -66,7 +66,7 @@ export const EditProfile = () => {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const c = await dispatch(fetchCompanyProfile() as any);
+      const c = await dispatch(fetchCompanyDetails() as any);
       if (!alive || !c) return;
       original.current = { company: c.company_name ?? '', industry: c.industry ?? '' };
       setCompany(c.company_name ?? '');

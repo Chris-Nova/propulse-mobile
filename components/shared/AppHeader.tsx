@@ -1,13 +1,12 @@
 import React from 'react';
 import { View, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppSelector } from '@/store/hooks';
-import { BRAND_PURPLE } from '@/constants/authTheme';
 import { useDashboardTheme } from '@/constants/dashboardTheme';
 import { initialOf } from '@/utils/format';
 import { useMenu } from '@/components/menu/MenuContext';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { UserAvatar } from './UserAvatar';
 
 // Top bar shared by Messages, Projects, Documents and Teams: logo (opens the menu),
@@ -25,10 +24,7 @@ export const AppHeader = () => {
         <Image source={require('../../assets/splash-logo.png')} style={styles.logo} resizeMode="contain" />
       </TouchableOpacity>
       <View style={styles.right}>
-        <View>
-          <Ionicons name="notifications" size={22} color={BRAND_PURPLE} />
-          <View style={[styles.dot, { borderColor: theme.background }]} />
-        </View>
+        <NotificationBell />
         <TouchableOpacity onPress={() => router.push('/(app)/account' as any)} activeOpacity={0.8}>
           <UserAvatar key={user?.avatar ?? 'none'} uri={user?.avatar} initial={initialOf(first)} theme={theme} />
         </TouchableOpacity>
@@ -41,8 +37,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   logo: { width: 94, height: 15 },
   right: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  dot: {
-    position: 'absolute', top: 0, right: 1, width: 8, height: 8, borderRadius: 4,
-    backgroundColor: BRAND_PURPLE, borderWidth: 1.5,
-  },
 });

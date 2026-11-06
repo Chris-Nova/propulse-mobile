@@ -107,6 +107,7 @@ export default function AppLayout() {
       <Tabs.Screen name="messages/[chatId]/index" options={hidden} />
       <Tabs.Screen name="account/index" options={hidden} />
       <Tabs.Screen name="account/change-password" options={hidden} />
+      <Tabs.Screen name="notifications" options={hidden} />
       <Tabs.Screen name="account/security" options={hidden} />
       <Tabs.Screen name="account/preferences" options={hidden} />
       <Tabs.Screen name="account/notifications" options={hidden} />

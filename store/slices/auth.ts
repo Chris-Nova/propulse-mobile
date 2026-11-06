@@ -1,3 +1,4 @@
+import { resetNotifications } from '@/store/reducers/notifications';
 import { capitalize } from 'lodash';
 import { router } from 'expo-router';
 
@@ -212,6 +213,7 @@ export const resetPassword = () => async (dispatch: AppDispatch) => {
 
 export const signOut = () => async (dispatch: AppDispatch) => {
   await TokenStorage.clear();
+  dispatch(resetNotifications());
   router.replace('/(auth)/welcome');
 };
 

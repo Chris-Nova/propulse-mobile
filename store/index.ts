@@ -14,6 +14,7 @@ import chatReducer from '@/store/reducers/chat';
 import authReducer from '@/store/reducers/auth';
 import appReducer from '@/store/reducers/app';
 import modalReducer from '@/store/reducers/modal';
+import notificationsReducer from '@/store/reducers/notifications';
 
 const rootReducer = combineReducers({
   asyncActions: asyncActionsReducer,
@@ -24,6 +25,7 @@ const rootReducer = combineReducers({
   account: accountReducer,
   project: projectReducer,
   modal: modalReducer,
+  notifications: notificationsReducer,
   chat: chatReducer,
   auth: authReducer,
   team: teamReducer,

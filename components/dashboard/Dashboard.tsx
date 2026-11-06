@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import {
   View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
 } from 'react-native';
@@ -178,10 +179,7 @@ export const Dashboard = () => {
           </TouchableOpacity>
           <View style={styles.headerIcons}>
             <Ionicons name="search-outline" size={22} color={theme.text} />
-            <View>
-              <Ionicons name="notifications" size={22} color={BRAND_PURPLE} />
-              <View style={[styles.bellDot, { borderColor: theme.background }]} />
-            </View>
+            <NotificationBell />
           </View>
         </View>
 

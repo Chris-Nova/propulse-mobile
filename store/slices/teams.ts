@@ -129,7 +129,7 @@ const firstReason = (errors: any, fallback: string): string => {
 };
 
 // GET /users/company-profile -> { id, company_name, company_username, industry, avatar }
-export const fetchCompanyProfile = () => async () => {
+export const fetchCompanyDetails = () => async () => {
   const { success, data } = await Fetch({ path: '/users/company-profile' });
   return success ? data : null;
 };

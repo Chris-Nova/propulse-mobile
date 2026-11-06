@@ -1,3 +1,4 @@
+import { notificationReceived } from '@/store/reducers/notifications';
 import { AppDispatch, store } from '@/store';
 import { Fetch } from '@/utils/api';
 import { TokenStorage } from '@/utils/storage';
@@ -43,6 +44,12 @@ const randomId = () => `temp_${Date.now()}_${Math.random().toString(36).slice(2,
 // with components/chats/slices/index.ts on the web app.
 const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
   const { chats } = store.getState().chat;
+
+  // In-app notification pushed by the server ({ event_type: 'notification.created', data: { notification } })
+  if (event?.event_type === 'notification.created') {
+    if (event.data?.notification) dispatch(notificationReceived(event.data.notification));
+    return;
+  }
 
   const {
     event_type,
