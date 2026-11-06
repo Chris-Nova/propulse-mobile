@@ -49,6 +49,8 @@ export default function AppLayout() {
   return (
     <MenuProvider>
     <Tabs
+      // Settings screens go "back" to the screen you came from
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -104,6 +106,12 @@ export default function AppLayout() {
       <Tabs.Screen name="messages/index" options={hidden} />
       <Tabs.Screen name="messages/[chatId]/index" options={hidden} />
       <Tabs.Screen name="account/index" options={hidden} />
+      <Tabs.Screen name="account/change-password" options={hidden} />
+      <Tabs.Screen name="account/security" options={hidden} />
+      <Tabs.Screen name="account/preferences" options={hidden} />
+      <Tabs.Screen name="account/notifications" options={hidden} />
+      {/* The Edit Profile design has no tab bar */}
+      <Tabs.Screen name="account/edit-profile" options={{ ...hidden, tabBarStyle: { display: 'none' } }} />
       <Tabs.Screen name="projects/create" options={hidden} />
       <Tabs.Screen name="projects/[projectId]/index" options={hidden} />
       <Tabs.Screen name="projects/[projectId]/edit" options={hidden} />
