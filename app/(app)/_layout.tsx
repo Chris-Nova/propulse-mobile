@@ -4,6 +4,7 @@ import { View, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDashboardTheme } from '@/constants/dashboardTheme';
 import { MenuProvider } from '@/components/menu/MenuContext';
+import { useChatSocket } from '@/components/messages/useChatSocket';
 
 const hidden = {
   tabBarButton: () => null,
@@ -15,6 +16,7 @@ const isUnder = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 export default function AppLayout() {
+  useChatSocket(); // one chat socket for the whole signed-in app
   const theme = useDashboardTheme();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
@@ -25,7 +27,7 @@ export default function AppLayout() {
     home: isUnder(pathname, '/dashboard') || isUnder(pathname, '/messages') || pathname === '/',
     projects: isUnder(pathname, '/projects'),
     teams: isUnder(pathname, '/teams'),
-    more: ['/more', '/documents', '/analytics', '/account'].some((p) => isUnder(pathname, p)),
+    more: ['/more', '/documents', '/analytics', '/account', '/notifications'].some((p) => isUnder(pathname, p)),
   };
 
   const icon = (name: keyof typeof Ionicons.glyphMap, focusedName: keyof typeof Ionicons.glyphMap, on: boolean) =>
@@ -104,7 +106,8 @@ export default function AppLayout() {
       <Tabs.Screen name="documents/index" options={hidden} />
       <Tabs.Screen name="analytics/index" options={hidden} />
       <Tabs.Screen name="messages/index" options={hidden} />
-      <Tabs.Screen name="messages/[chatId]/index" options={hidden} />
+      {/* The chat designs have no tab bar */}
+      <Tabs.Screen name="messages/[chatId]/index" options={{ ...hidden, tabBarStyle: { display: 'none' } }} />
       <Tabs.Screen name="account/index" options={hidden} />
       <Tabs.Screen name="account/change-password" options={hidden} />
       <Tabs.Screen name="notifications" options={hidden} />

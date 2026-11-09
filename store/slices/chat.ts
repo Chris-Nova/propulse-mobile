@@ -1,4 +1,5 @@
 import { notificationReceived } from '@/store/reducers/notifications';
+import { fetchUnreadCount } from '@/store/slices/notifications';
 import { AppDispatch, store } from '@/store';
 import { Fetch } from '@/utils/api';
 import { TokenStorage } from '@/utils/storage';
@@ -27,7 +28,31 @@ import { Chat, ChatMessage, ChatFilters, Mention } from '@/types';
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.propulse.app';
 const WS_URL = API_URL.replace('https', 'wss').replace('http', 'ws');
 
+// ─── Socket lifecycle ─────────────────────────────────────
+// One socket per user, kept open while the app is in use (see useChatSocket). It reconnects with a
+// growing delay when it drops, and gives up only when the server rejects the token.
 let socket: WebSocket | null = null;
+let wanted = false; // should the socket be open right now?
+let opening = false; // guards against two connect calls racing
+let attempt = 0;
+let hasConnected = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let viewingChatId: string | null = null;
+
+const AUTH_CLOSE_CODES = [4001, 4003]; // backend: missing/invalid token, token does not match the user
+
+// The chat screen reports which conversation is on screen. Only that one is re-read after a
+// reconnect, because loading history marks a conversation as read on the server.
+export const setViewingChat = (chatId: string | null) => {
+  viewingChatId = chatId;
+};
+
+const clearRetry = () => {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+};
 
 const finishAsyncAction = (payload: any) => (dispatch: AppDispatch) => {
   if (payload.feedbackType) {
@@ -102,27 +127,64 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
   }
 };
 
+const openSocket = async (dispatch: AppDispatch) => {
+  if (!wanted || opening) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+
+  opening = true;
+  try {
+    const token = await TokenStorage.getToken();
+    const { user } = store.getState().account;
+    if (!wanted || !token || !user?.id) return;
+
+    // Backend route is `ws/<user_uuid>/?token=...` (apps/messages/routing.py) —
+    // it's a single unified socket per user, not per-conversation.
+    const ws = new WebSocket(`${WS_URL}/ws/${user.id}/?token=${token}`);
+    socket = ws;
+
+    ws.onopen = () => {
+      attempt = 0;
+      if (hasConnected) {
+        // We were away (offline or in the background): catch up on whatever was missed
+        const { activeChatsFilter } = store.getState().chat;
+        dispatch(fetchChats((activeChatsFilter ?? ChatFilters.ALL) as ChatFilters) as any);
+        dispatch(fetchUnreadCount(true) as any);
+        if (viewingChatId) dispatch(fetchMessages(viewingChatId) as any);
+      }
+      hasConnected = true;
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        dispatch(handleSocketEvent(JSON.parse(event.data)) as any);
+      } catch (_) {}
+    };
+
+    ws.onerror = () => {}; // onclose always follows
+
+    ws.onclose = (event) => {
+      if (socket === ws) socket = null;
+      if (!wanted || AUTH_CLOSE_CODES.includes(event.code)) return;
+      clearRetry();
+      const delay = Math.min(30000, 1000 * 2 ** attempt);
+      attempt += 1;
+      retryTimer = setTimeout(() => openSocket(dispatch), delay);
+    };
+  } finally {
+    opening = false;
+  }
+};
+
 export const connectSocket = () => async (dispatch: AppDispatch) => {
-  const token = await TokenStorage.getToken();
-  const { user } = store.getState().account;
-  if (!token || !user?.id) return;
-
-  // Backend route is `ws/<user_uuid>/?token=...` (apps/messages/routing.py) —
-  // it's a single unified socket per user, not per-conversation.
-  socket = new WebSocket(`${WS_URL}/ws/${user.id}/?token=${token}`);
-
-  socket.onmessage = (event) => {
-    try {
-      dispatch(handleSocketEvent(JSON.parse(event.data)) as any);
-    } catch (_) {}
-  };
-
-  socket.onerror = () => {
-    socket = null;
-  };
+  wanted = true;
+  clearRetry();
+  await openSocket(dispatch);
 };
 
 export const disconnectSocket = () => () => {
+  wanted = false;
+  clearRetry();
+  attempt = 0;
   if (socket) {
     socket.close();
     socket = null;
@@ -138,7 +200,7 @@ export const fetchChats = (filter: ChatFilters = ChatFilters.ALL) => async (disp
   const { success, message, data } = await Fetch({ path: `/messages/conversations?${query}` });
 
   dispatch(finishAsyncAction({ target: 'fetchChats', success, message }) as any);
-  if (!success || !Array.isArray(data?.conversations)) return;
+  if (!success || !Array.isArray(data?.conversations)) return false;
 
   const chats: Record<string, Chat> = {};
   for (const chat of data.conversations as Chat[]) chats[chat.id] = chat;
@@ -146,6 +208,7 @@ export const fetchChats = (filter: ChatFilters = ChatFilters.ALL) => async (disp
   dispatch(setActiveChatsFilter(data.filter ?? filter));
   dispatch(setChatsCount(data.count ?? data.conversations.length));
   dispatch(setChats(chats));
+  return true;
 };
 
 export const fetchMessages = (chatId: string, cursor = '') => async (dispatch: AppDispatch) => {
@@ -156,11 +219,11 @@ export const fetchMessages = (chatId: string, cursor = '') => async (dispatch: A
   });
 
   dispatch(finishAsyncAction({ target: 'fetchMessages', success, message }) as any);
-  if (!success || !data) return;
+  if (!success || !data) return false;
 
   const { chats, pagination } = store.getState().chat;
   const existingChat = chats[chatId];
-  if (!existingChat) return;
+  if (!existingChat) return false;
 
   const incoming = data.messages ?? [];
   const messages = cursor ? [...incoming, ...existingChat.messages] : incoming;
@@ -174,6 +237,7 @@ export const fetchMessages = (chatId: string, cursor = '') => async (dispatch: A
   // call (see MessageService.get_conversation_messages), so reflect that
   // locally right away instead of waiting on a follow-up fetchChats.
   dispatch(updateChats({ ...existingChat, messages, unread_count: cursor ? existingChat.unread_count : 0 }));
+  return true;
 };
 
 export const markConversationAsRead = (chatId: string) => async (dispatch: AppDispatch) => {
