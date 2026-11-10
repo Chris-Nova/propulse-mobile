@@ -7,7 +7,9 @@ import { fetchUnreadCount } from '@/store/slices/notifications';
 import { BRAND_PURPLE } from '@/constants/authTheme';
 import { useDashboardTheme } from '@/constants/dashboardTheme';
 
-// Bell used in every header. The purple dot shows only while there are unread
+export const NOTIFICATION_RED = '#EF3B30';
+
+// Bell used in every header. The red dot shows only while there are unread
 // notifications; pressing it opens the notifications list.
 export const NotificationBell = ({ onPress }: { onPress?: () => void }) => {
   const dispatch = useAppDispatch();
@@ -39,7 +41,7 @@ export const NotificationBell = ({ onPress }: { onPress?: () => void }) => {
 
 const styles = StyleSheet.create({
   dot: {
-    position: 'absolute', top: 0, right: 1, width: 8, height: 8, borderRadius: 4,
-    backgroundColor: BRAND_PURPLE, borderWidth: 1.5,
+    position: 'absolute', top: -1, right: 0, width: 10, height: 10, borderRadius: 5,
+    backgroundColor: NOTIFICATION_RED, borderWidth: 1.5,
   },
 });

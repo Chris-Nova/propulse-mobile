@@ -41,22 +41,31 @@ export const DEFAULT_PREFS: Prefs = {
 };
 
 let cache: Prefs = DEFAULT_PREFS;
-let loaded = false;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-const ensureLoaded = async () => {
-  if (loaded) return;
-  loaded = true;
-  try {
-    const raw = await AsyncStorage.getItem(KEY);
-    if (raw) {
-      cache = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
-      emit();
-    }
-  } catch {
-    // storage unavailable: keep the defaults for this session
+let loadPromise: Promise<void> | null = null;
+const ensureLoaded = (): Promise<void> => {
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(KEY);
+        if (raw) {
+          cache = { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+          emit();
+        }
+      } catch {
+        // storage unavailable: keep the defaults for this session
+      }
+    })();
   }
+  return loadPromise;
+};
+
+// For code outside React (e.g. the socket handler): the saved choices, once they have loaded.
+export const getPreferences = async (): Promise<Prefs> => {
+  await ensureLoaded();
+  return cache;
 };
 
 const subscribe = (listener: () => void) => {

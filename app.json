@@ -96,7 +96,8 @@
       [
         "expo-file-system",
         {}
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

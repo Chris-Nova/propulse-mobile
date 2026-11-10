@@ -1,4 +1,5 @@
 import { notificationReceived } from '@/store/reducers/notifications';
+import { playNotificationSound } from '@/utils/notificationSound';
 import { fetchUnreadCount } from '@/store/slices/notifications';
 import { AppDispatch, store } from '@/store';
 import { Fetch } from '@/utils/api';
@@ -72,7 +73,13 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
 
   // In-app notification pushed by the server ({ event_type: 'notification.created', data: { notification } })
   if (event?.event_type === 'notification.created') {
-    if (event.data?.notification) dispatch(notificationReceived(event.data.notification));
+    const incoming = event.data?.notification;
+    if (incoming) {
+      // The server re-sends a message digest when it grows; only a first-time unread one is "new"
+      const alreadyUnread = store.getState().notifications.items.some((i) => i.id === incoming.id && !i.is_read);
+      dispatch(notificationReceived(incoming));
+      if (!incoming.is_read && !alreadyUnread) playNotificationSound(incoming, viewingChatId);
+    }
     return;
   }
 
