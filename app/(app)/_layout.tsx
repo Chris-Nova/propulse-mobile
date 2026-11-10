@@ -112,6 +112,7 @@ export default function AppLayout() {
       <Tabs.Screen name="account/change-password" options={hidden} />
       <Tabs.Screen name="notifications" options={hidden} />
       <Tabs.Screen name="account/security" options={hidden} />
+      <Tabs.Screen name="account/delete-account" options={hidden} />
       <Tabs.Screen name="account/preferences" options={hidden} />
       <Tabs.Screen name="account/notifications" options={hidden} />
       {/* The Edit Profile design has no tab bar */}
@@ -120,6 +121,7 @@ export default function AppLayout() {
       <Tabs.Screen name="projects/[projectId]/index" options={hidden} />
       <Tabs.Screen name="projects/[projectId]/edit" options={hidden} />
       <Tabs.Screen name="teams/members/[memberId]/index" options={hidden} />
+      <Tabs.Screen name="teams/invites/[inviteId]/index" options={hidden} />
     </Tabs>
     </MenuProvider>
   );

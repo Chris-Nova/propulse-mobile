@@ -7,9 +7,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { router } from 'expo-router';
 import { setMember } from '@/store/reducers/team';
-import { fetchTeamMembers, fetchTeamInvites, deleteTeamMember, revokeTeamInvite } from '@/store/slices/teams';
+import { fetchTeamMembers, fetchTeamInvites, deleteTeamMember } from '@/store/slices/teams';
 import { fetchProjects } from '@/store/slices/projects';
-import { TeamMember } from '@/types';
+import { TeamInvite, TeamMember } from '@/types';
 import { BRAND_PURPLE } from '@/constants/authTheme';
 import { useDashboardTheme } from '@/constants/dashboardTheme';
 import { isValidEmail } from '@/utils/validators';
@@ -19,6 +19,8 @@ import { FilterPills } from '@/components/shared/ListControls';
 import { SelectField } from '@/components/shared/SelectField';
 import { BottomGlow } from '@/components/splash/BottomGlow';
 import { sendInvites } from './inviteMany';
+import { ActionSheet } from '@/components/settings/ActionSheet';
+import { useInviteActions } from './InviteActions';
 
 
 // ─── Invite Team Member form ───────────────────────────────
@@ -184,7 +186,7 @@ const MemberRow = ({ member, onDelete }: { member: TeamMember; onDelete: () => v
       <View style={[styles.rolePill, { backgroundColor: tint.bg }]}>
         <Text style={{ color: tint.icon, fontSize: 9.5, fontWeight: '600', textTransform: 'capitalize' }}>{member.role}</Text>
       </View>
-      {!member.is_owner && (
+      {member.is_owner && (
         <TouchableOpacity onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Remove member">
           <Ionicons name="trash-outline" size={17} color="#E33629" />
         </TouchableOpacity>
@@ -199,6 +201,8 @@ export const Teams = () => {
   const theme = useDashboardTheme();
   const { members, invites } = useAppSelector((s) => s.team);
   const [activeTab, setActiveTab] = useState<'members' | 'invites'>('members');
+  const [sheetInvite, setSheetInvite] = useState<TeamInvite | null>(null);
+  const { actionsFor, messageModal } = useInviteActions();
 
   useEffect(() => {
     dispatch(fetchTeamMembers() as any);
@@ -206,7 +210,7 @@ export const Teams = () => {
   }, []);
 
   const handleDeleteMember = (member: TeamMember) => {
-    Alert.alert('Remove Member', `Are you sure you want to remove ${member.user_name}?`, [
+    Alert.alert('Remove Member', `Remove ${member.user_name} from your team? They will be removed from all projects you own.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => dispatch(deleteTeamMember(member.id) as any) },
     ]);
@@ -276,7 +280,12 @@ export const Teams = () => {
             invites.map((item) => {
               const st = item.status === 'pending' ? theme.status.pending : item.status === 'accepted' ? theme.status.completed : { bg: theme.palette.pink.bg, fg: theme.palette.pink.icon, label: item.status };
               return (
-                <View key={item.id} style={[styles.memberRow, { backgroundColor: theme.card, borderColor: theme.cardBorder }, theme.shadow && styles.shadow]}>
+                <TouchableOpacity
+                  key={item.id}
+                  activeOpacity={0.85}
+                  onPress={() => router.push(`/(app)/teams/invites/${item.id}` as any)}
+                  style={[styles.memberRow, { backgroundColor: theme.card, borderColor: theme.cardBorder }, theme.shadow && styles.shadow]}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.memberName, { color: theme.text }]} numberOfLines={1}>{item.email}</Text>
                     {!!(item as any).project_name && (
@@ -286,17 +295,28 @@ export const Teams = () => {
                   <View style={[styles.rolePill, { backgroundColor: st.bg }]}>
                     <Text style={{ color: st.fg, fontSize: 9.5, fontWeight: '600', textTransform: 'capitalize' }}>{st.label}</Text>
                   </View>
-                  {item.status === 'pending' && (
-                    <TouchableOpacity onPress={() => dispatch(revokeTeamInvite(item.id) as any)} accessibilityLabel="Revoke invite">
-                      <Ionicons name="close-circle-outline" size={20} color="#E33629" />
-                    </TouchableOpacity>
-                  )}
-                </View>
+                  <TouchableOpacity
+                    onPress={() => setSheetInvite(item)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityLabel="Invite actions"
+                  >
+                    <Ionicons name="ellipsis-horizontal" size={20} color={theme.muted} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
               );
             })
           )}
         </View>
       </ScrollView>
+
+      <ActionSheet
+        visible={!!sheetInvite}
+        title={sheetInvite?.email ?? ''}
+        subtitle={sheetInvite?.project_name}
+        actions={sheetInvite ? actionsFor(sheetInvite) : []}
+        onClose={() => setSheetInvite(null)}
+      />
+      {messageModal}
     </View>
   );
 };

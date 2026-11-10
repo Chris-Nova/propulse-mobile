@@ -5,6 +5,8 @@ import { showFeedback } from '@/store/reducers/feedback';
 import { setMembers, setMember, setInvites, setInvite, updateInviteModel, resetInviteModel } from '@/store/reducers/team';
 import { setAnalytics } from '@/store/reducers/misc';
 import { setUser, setSubscription, setPlans, setQuota } from '@/store/reducers/account';
+import { MemberRoles, TeamInvite, TeamMember } from '@/types';
+import { Activity } from '@/components/dashboard/activities';
 
 const finishAsyncAction = (payload: any) => (dispatch: AppDispatch) => {
   if (payload.feedbackType) {
@@ -56,10 +58,14 @@ export const sendTeamInvite = () => async (dispatch: AppDispatch) => {
   return success;
 };
 
+// Removes a person from your team directory and from every project you own.
+// `memberId` is the contact id (member.id === member.central_member_id), so the route is
+// DELETE /teams/<contact_id>/delete (DeleteTeamContactView). The older
+// /teams/members/<id>/delete route expects a per-project membership id and answers "not found".
 export const deleteTeamMember = (memberId: string) => async (dispatch: AppDispatch) => {
   dispatch(startAsyncAction('deleteTeamMember'));
   const { success, message } = await Fetch({
-    path: `/teams/members/${memberId}/delete`,
+    path: `/teams/${memberId}/delete`,
     method: 'DELETE',
   });
   dispatch(finishAsyncAction({
@@ -70,6 +76,34 @@ export const deleteTeamMember = (memberId: string) => async (dispatch: AppDispat
   }) as any);
   if (success) await dispatch(fetchTeamMembers() as any);
   return success;
+};
+
+// PATCH /teams/members/<contact_id>/update { role } — role must be admin, collaborator or client.
+export const updateTeamMemberRole = (memberId: string, role: MemberRoles) => async (dispatch: AppDispatch) => {
+  dispatch(startAsyncAction('updateTeamMember'));
+  const { success, message, data } = await Fetch({
+    path: `/teams/members/${memberId}/update`,
+    method: 'PATCH',
+    body: { role },
+  });
+  dispatch(finishAsyncAction({
+    feedbackType: 'notification',
+    target: 'updateTeamMember',
+    success,
+    message,
+  }) as any);
+  if (success) {
+    const current = store.getState().team.member;
+    dispatch(setMember({ ...(current as TeamMember), ...(data ?? {}), role }));
+    await dispatch(fetchTeamMembers() as any);
+  }
+  return success;
+};
+
+// GET /teams/members/activities/<user_id>?limit=10 — what this person did in projects you share.
+export const fetchMemberActivities = (userId: string) => async (): Promise<Activity[]> => {
+  const { success, data } = await Fetch({ path: `/teams/members/activities/${userId}?limit=10` });
+  return success && Array.isArray(data?.activities) ? data.activities : [];
 };
 
 export const revokeTeamInvite = (inviteId: string) => async (dispatch: AppDispatch) => {
@@ -85,6 +119,49 @@ export const revokeTeamInvite = (inviteId: string) => async (dispatch: AppDispat
     message,
   }) as any);
   if (success) await dispatch(fetchTeamInvites() as any);
+  return success;
+};
+
+// POST /teams/invite/<id>/resend. The server cancels the old invite and creates a NEW one
+// (new id), so the list is refreshed afterwards.
+export const resendTeamInvite = (inviteId: string) => async (dispatch: AppDispatch) => {
+  dispatch(startAsyncAction('resendTeamInvite'));
+  const { success, message } = await Fetch({
+    path: `/teams/invite/${inviteId}/resend`,
+    method: 'POST',
+    body: { invite_id: inviteId },
+  });
+  dispatch(finishAsyncAction({
+    feedbackType: 'notification',
+    target: 'resendTeamInvite',
+    success,
+    message,
+  }) as any);
+  if (success) await dispatch(fetchTeamInvites() as any);
+  return success;
+};
+
+// POST /teams/invite/<id>/message { message } — emails a note to the invitee.
+export const sendInviteMessage = (inviteId: string, text: string) => async (dispatch: AppDispatch) => {
+  dispatch(startAsyncAction('sendInviteMessage'));
+  const { success, message } = await Fetch({
+    path: `/teams/invite/${inviteId}/message`,
+    method: 'POST',
+    body: { message: text },
+  });
+  dispatch(finishAsyncAction({
+    feedbackType: 'notification',
+    target: 'sendInviteMessage',
+    success,
+    message,
+  }) as any);
+  return success;
+};
+
+// GET /teams/invite/<id>: full details (inviter_name, expires_in_days, can_accept...).
+export const fetchInviteDetails = (inviteId: string) => async (): Promise<TeamInvite | null> => {
+  const { success, data } = await Fetch({ path: `/teams/invite/${inviteId}` });
+  return success && data ? (data as TeamInvite) : null;
 };
 
 // ─── Analytics ────────────────────────────────────────────
@@ -201,6 +278,7 @@ export const fetchTeamMember = (memberId: string) => async (dispatch: AppDispatc
   const { success, message, data } = await Fetch({ path: `/teams/members/${memberId}` });
   dispatch(finishAsyncAction({ target: 'fetchTeamMember', success, message }) as any);
   if (success && data) dispatch(setMember(data));
+  return success && !!data;
 };
 
 export const changePassword = (currentPassword: string, newPassword: string) => async (dispatch: AppDispatch) => {

@@ -26,16 +26,19 @@ export const useNotify = () => {
     dispatch(showFeedback({ feedbackType: 'notification', type, message }));
 };
 
-export const IconCircle = ({ icon, size = 40 }: { icon: IconName; size?: 40 | 60 }) => {
-  const { theme, iconColor } = useSettingsTheme();
+export const DANGER = '#E33629';
+
+export const IconCircle = ({ icon, size = 40, danger }: { icon: IconName; size?: 40 | 60; danger?: boolean }) => {
+  const { theme, iconColor, light } = useSettingsTheme();
   return (
     <View
       style={{
         width: size, height: size, borderRadius: size / 2,
-        backgroundColor: theme.palette.lavender.bg, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: danger ? (light ? '#FCE7E4' : 'rgba(239,68,68,0.16)') : theme.palette.lavender.bg,
+        alignItems: 'center', justifyContent: 'center',
       }}
     >
-      <Ionicons name={icon} size={size === 60 ? 26 : 20} color={iconColor} />
+      <Ionicons name={icon} size={size === 60 ? 26 : 20} color={danger ? (light ? DANGER : '#FF7A70') : iconColor} />
     </View>
   );
 };
@@ -66,9 +69,10 @@ interface RowProps {
   right?: React.ReactNode;
   divider?: boolean;
   dim?: boolean;
+  danger?: boolean;
 }
 
-export const Row = ({ icon, title, subtitle, big, value, onPress, right, divider, dim }: RowProps) => {
+export const Row = ({ icon, title, subtitle, big, value, onPress, right, divider, dim, danger }: RowProps) => {
   const { theme } = useSettingsTheme();
   const body = (
     <View
@@ -79,9 +83,9 @@ export const Row = ({ icon, title, subtitle, big, value, onPress, right, divider
         dim && { opacity: 0.45 },
       ]}
     >
-      <IconCircle icon={icon} size={big ? 60 : 40} />
+      <IconCircle icon={icon} size={big ? 60 : 40} danger={danger} />
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rowTitle, { color: theme.text }]} numberOfLines={1}>{title}</Text>
+        <Text style={[styles.rowTitle, { color: danger ? DANGER : theme.text }]} numberOfLines={1}>{title}</Text>
         {!!subtitle && <Text style={[styles.rowSub, { color: theme.muted }]}>{subtitle}</Text>}
       </View>
       {!!value && <Text style={[styles.rowValue, { color: theme.muted }]} numberOfLines={1}>{value}</Text>}

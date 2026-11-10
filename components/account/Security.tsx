@@ -54,6 +54,17 @@ export const Security = () => {
           onPress={() => notify('Login activity is coming soon.')}
         />
       </Card>
+      <Gap h={28} />
+      <Card>
+        <Row
+          big
+          danger
+          icon="trash-outline"
+          title="Delete Account"
+          subtitle="Permanently remove your account"
+          onPress={() => router.push('/(app)/account/delete-account' as any)}
+        />
+      </Card>
     </SettingsShell>
   );
 };
