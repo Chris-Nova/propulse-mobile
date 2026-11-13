@@ -119,13 +119,14 @@ const RingAvatar = ({ name, size = 38 }: { name: string; size?: number }) => {
   );
 };
 
-// pending = clock, sent = one tick, delivered = two ticks, read = two purple ticks
+// pending = clock, sent = one grey tick, delivered = two grey ticks, read = two blue ticks
+const READ_BLUE = '#2F9BFF';
 const Ticks = ({ status }: { status: ChatMessage['status'] }) => {
-  const { theme, accent } = useSettingsTheme();
+  const { theme } = useSettingsTheme();
   if (status === 'pending') return <Ionicons name="time-outline" size={13} color={theme.muted} />;
-  if (status === 'read') return <Ionicons name="checkmark-done" size={15} color={accent} />;
-  if (status === 'delivered') return <Ionicons name="checkmark-done" size={15} color="#3CC4B5" />;
-  return <Ionicons name="checkmark" size={14} color={theme.muted} />;
+  if (status === 'read') return <Ionicons name="checkmark-done" size={16} color={READ_BLUE} />;
+  if (status === 'delivered') return <Ionicons name="checkmark-done" size={16} color={theme.muted} />;
+  return <Ionicons name="checkmark" size={15} color={theme.muted} />;
 };
 
 type ListItem =

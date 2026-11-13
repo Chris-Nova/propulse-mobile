@@ -6,7 +6,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchChats, deleteChat, refreshChatsIfStale } from '@/store/slices/chat';
+import { fetchChats, deleteChat, refreshChatsIfStale, setMessagesScreenOpen } from '@/store/slices/chat';
+import { liveMessagesCleared } from '@/store/reducers/notifications';
 import { setActiveChatId } from '@/store/reducers/chat';
 import { Chat, ChatFilters } from '@/types';
 import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
@@ -46,7 +47,10 @@ export const ChatList = () => {
   // Coming back to this tab: refresh unread badges (skipped if the list was just loaded)
   useFocusEffect(
     useCallback(() => {
+      setMessagesScreenOpen(true);
+      dispatch(liveMessagesCleared());
       dispatch(refreshChatsIfStale() as any);
+      return () => setMessagesScreenOpen(false);
     }, [dispatch])
   );
 

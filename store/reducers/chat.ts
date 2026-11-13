@@ -56,6 +56,14 @@ const omitKeys = <T extends Record<string, any>>(target: T, keys: string[]): T =
   return clone;
 };
 
+// The conversation list shows `last_message` and sorts by it. The server supplies it, but it only
+// changes when the list is re-fetched, so a message sent or received live left the preview (and
+// the order) stale. Whenever a chat's loaded messages change, point `last_message` at the newest.
+const syncLast = (chat?: Chat) => {
+  if (!chat || !chat.messages?.length) return;
+  chat.last_message = chat.messages[chat.messages.length - 1];
+};
+
 const chatSlice = createSlice({
   name: 'chat',
   initialState,
@@ -89,6 +97,7 @@ const chatSlice = createSlice({
       if (message.id && chat.messages.some((m) => m.id === message.id)) return;
       chat.unread_count = (chat.unread_count || 0) + 1;
       chat.messages.push(message as ChatMessage);
+      chat.last_message = message as ChatMessage; // preview even when no history is loaded
     },
     // A message arriving in the conversation that is on screen: it is read as it lands,
     // so it is added without touching the unread count.
@@ -99,6 +108,7 @@ const chatSlice = createSlice({
       if (!chat) return;
       if (message.id && chat.messages.some((m) => m.id === message.id)) return;
       chat.messages.push(message as ChatMessage);
+      chat.last_message = message as ChatMessage;
     },
     setPagination: (state, action: PayloadAction<ChatState['pagination']>) => {
       state.pagination = action.payload;
@@ -110,11 +120,13 @@ const chatSlice = createSlice({
       chat.messages = chat.messages.map((chatMessage) =>
         messageIds.includes(chatMessage.id) ? { ...chatMessage, status: 'read' } : chatMessage
       );
+      syncLast(chat);
     },
     pushToActiveChatMessages: (state, action: PayloadAction<ChatMessage>) => {
       const { activeChatId, chats } = state;
       if (!activeChatId || !chats[activeChatId]) return;
       chats[activeChatId].messages.push(action.payload);
+      chats[activeChatId].last_message = action.payload;
     },
     updateMessageByTempId: (state, action: PayloadAction<UpdateMessage>) => {
       const { defaultToId = false, message, chatId } = action.payload;
@@ -129,6 +141,7 @@ const chatSlice = createSlice({
         if (isTempMessage || (defaultToId && isSentMessage)) return newMessage;
         return chatMessage;
       });
+      syncLast(chat);
     },
     updateActiveChatMessage: (state, action: PayloadAction<ChatMessage>) => {
       const { activeChatId, chats } = state;
@@ -139,6 +152,7 @@ const chatSlice = createSlice({
       activeChat.messages = activeChat.messages.map((chatMessage) =>
         chatMessage.id === message.id ? { ...chatMessage, ...message } : chatMessage
       );
+      syncLast(activeChat);
     },
     setMessageFiles: (state, action: PayloadAction<Array<File>>) => {
       state.message.files = action.payload;
@@ -155,12 +169,14 @@ const chatSlice = createSlice({
       chat.messages = chat.messages.map((chatMessage) =>
         chatMessage.id === message.id ? { ...chatMessage, ...message } : chatMessage
       );
+      syncLast(chat);
     },
     deleteMessageById: (state, action: PayloadAction<UpdateMessage>) => {
       const { message, chatId } = action.payload;
       const chat = state.chats[chatId];
       if (!chat) return;
       chat.messages = chat.messages.filter(({ id }) => id !== message.id);
+      syncLast(chat);
     },
     updateActiveChat: (state, action: PayloadAction<Partial<Chat>>) => {
       if (!state.activeChatId) return;
@@ -247,6 +263,7 @@ const chatSlice = createSlice({
     },
     updateChats: (state, action: PayloadAction<Chat>) => {
       state.chats[action.payload.id] = action.payload;
+      syncLast(state.chats[action.payload.id]);
     },
     resetChatModel: (state) => {
       state.model = initialState.model;

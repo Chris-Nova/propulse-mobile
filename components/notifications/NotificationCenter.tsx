@@ -6,7 +6,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { AppNotification } from '@/store/reducers/notifications';
+import { AppNotification, liveMessagesCleared } from '@/store/reducers/notifications';
 import {
   fetchNotifications, fetchUnreadCount, markNotificationRead,
 } from '@/store/slices/notifications';
@@ -50,6 +50,7 @@ export const NotificationCenter = () => {
   // Load (and re-load) whenever the screen is shown
   useFocusEffect(
     useCallback(() => {
+      dispatch(liveMessagesCleared());
       dispatch(fetchNotifications(1) as any);
       dispatch(fetchUnreadCount(true) as any);
     }, [dispatch])

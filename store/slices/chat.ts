@@ -1,4 +1,4 @@
-import { notificationReceived } from '@/store/reducers/notifications';
+import { notificationReceived, liveMessageArrived, AppNotification } from '@/store/reducers/notifications';
 import { playNotificationSound } from '@/utils/notificationSound';
 import { fetchUnreadCount } from '@/store/slices/notifications';
 import { AppDispatch, store } from '@/store';
@@ -39,6 +39,9 @@ let attempt = 0;
 let hasConnected = false;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let viewingChatId: string | null = null;
+let messagesScreenOpen = false; // is the Messages list in front?
+let chatsDirty = false; // a message arrived that the list may not know about: next refresh must not be skipped
+const alertedMessageIds = new Set<string>(); // a message alerts once, even if the server repeats it
 
 const AUTH_CLOSE_CODES = [4001, 4003]; // backend: missing/invalid token, token does not match the user
 
@@ -46,6 +49,12 @@ const AUTH_CLOSE_CODES = [4001, 4003]; // backend: missing/invalid token, token 
 // reconnect, because loading history marks a conversation as read on the server.
 export const setViewingChat = (chatId: string | null) => {
   viewingChatId = chatId;
+};
+
+// The Messages list reports when it is in front. Together with viewingChatId this tells us whether
+// the person is inside the Messages section, where a new message needs no extra alert.
+export const setMessagesScreenOpen = (open: boolean) => {
+  messagesScreenOpen = open;
 };
 
 const clearRetry = () => {
@@ -68,6 +77,12 @@ const randomId = () => `temp_${Date.now()}_${Math.random().toString(36).slice(2,
 // Mirrors the web app's `chatWebSocketEventHandler` — event names and
 // payload shape are set by the backend, so this must stay in lockstep
 // with components/chats/slices/index.ts on the web app.
+// A message I sent myself is never "new" to me: no unread count, no bell, no chime.
+const isMine = (message: any) => {
+  const me = store.getState().account.user?.id;
+  return !!me && !!message?.member_id && String(message.member_id) === String(me);
+};
+
 const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
   const { chats } = store.getState().chat;
 
@@ -103,6 +118,28 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
   }
 
   if (!chatId) return;
+
+  // A new message from someone else while the person is outside Messages (e.g. on the dashboard):
+  // light the bell and chime. This runs before the "chat not loaded" check below, because the
+  // dashboard never loads the conversation list.
+  if (event_type === 'message_received' && message?.id) {
+    const mine = isMine(message);
+    if (!mine && !chats[chatId]) {
+      chatsDirty = true;
+      dispatch(refreshChatsIfStale() as any); // a conversation the list has not loaded
+    }
+    const insideMessages = messagesScreenOpen || viewingChatId !== null;
+    if (!mine && !insideMessages && !alertedMessageIds.has(message.id)) {
+      alertedMessageIds.add(message.id);
+      if (alertedMessageIds.size > 200) alertedMessageIds.clear();
+      dispatch(liveMessageArrived());
+      playNotificationSound(
+        { id: `live-${message.id}`, category: 'messages', event_type: 'message.received', is_read: false } as AppNotification,
+        viewingChatId
+      );
+    }
+  }
+
   const targetChat = chats[chatId];
   if (!targetChat && event_type.startsWith('message_')) return; // chat not loaded locally, ignore
 
@@ -123,7 +160,10 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
       // `viewingChatId` is set only while that conversation is on screen (see ChatRoom). It used to
       // be the "active chat" id, which was never cleared on leaving a chat, so the last chat you
       // opened silently swallowed its unread badge.
-      if (viewingChatId === chatId) {
+      if (isMine(message)) {
+        // Sent from another device of mine: show it, but never count it as unread
+        dispatch(appendMessageToChat({ message, chatId }));
+      } else if (viewingChatId === chatId) {
         dispatch(appendMessageToChat({ message, chatId }));
         dispatch(markConversationAsRead(chatId) as any); // keep the server's unread count in step
       } else {
@@ -210,13 +250,14 @@ let lastChatsFetch = 0;
 // Screens call this when they come back into view, so unread badges are right even if a live
 // event was missed.
 export const refreshChatsIfStale = () => async (dispatch: AppDispatch) => {
-  if (Date.now() - lastChatsFetch < 10000) return;
+  if (!chatsDirty && Date.now() - lastChatsFetch < 10000) return;
   const filter = (store.getState().chat.activeChatsFilter ?? ChatFilters.ALL) as ChatFilters;
   await dispatch(fetchChats(filter) as any);
 };
 
 export const fetchChats = (filter: ChatFilters = ChatFilters.ALL) => async (dispatch: AppDispatch) => {
   lastChatsFetch = Date.now();
+  chatsDirty = false;
   dispatch(startAsyncAction('fetchChats'));
 
   // The backend's list_conversations endpoint returns the full set for the
@@ -305,7 +346,9 @@ export const sendMessage = (chat: Chat, text: string, replyTo?: ChatMessage['rep
     const { success, message, data } = await Fetch({
       path: `/messages/conversations/${chat.id}/message`,
       method: 'POST',
-      body: { text, temp_id: tempId, mentions, reply_to: replyTo?.message_id },
+      // The backend reads the optimistic id from `id` (SendMessageSerializer) and echoes it back as
+      // `temp_id`; sending `temp_id` meant delivered/read receipts could never find the message.
+      body: { id: tempId, text, mentions, reply_to: replyTo?.message_id },
     });
 
     dispatch(finishAsyncAction({ target: 'sendMessage', success, message }) as any);

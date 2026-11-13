@@ -14,7 +14,9 @@ export const NOTIFICATION_RED = '#EF3B30';
 export const NotificationBell = ({ onPress }: { onPress?: () => void }) => {
   const dispatch = useAppDispatch();
   const theme = useDashboardTheme();
-  const unread = useAppSelector((s) => s.notifications.unreadCount);
+  const unreadNotifications = useAppSelector((s) => s.notifications.unreadCount);
+  const liveMessages = useAppSelector((s) => s.notifications.liveMessageCount);
+  const unread = unreadNotifications + liveMessages;
 
   // Re-check whenever the screen comes into view (throttled inside the thunk)
   useFocusEffect(

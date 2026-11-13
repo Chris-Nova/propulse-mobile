@@ -16,6 +16,9 @@ export interface AppNotification {
 interface NotificationsState {
   items: AppNotification[];
   unreadCount: number;
+  // Messages that arrived live while the person was outside the Messages section. Client-only: the
+  // server's notification for a message is a delayed digest, so this is what lights the bell now.
+  liveMessageCount: number;
   page: number;
   hasMore: boolean;
   loading: boolean;
@@ -26,6 +29,7 @@ interface NotificationsState {
 const initialState: NotificationsState = {
   items: [],
   unreadCount: 0,
+  liveMessageCount: 0,
   page: 0,
   hasMore: false,
   loading: false,
@@ -89,6 +93,12 @@ const notificationsSlice = createSlice({
       });
       state.unreadCount = 0;
     },
+    liveMessageArrived: (state) => {
+      state.liveMessageCount += 1;
+    },
+    liveMessagesCleared: (state) => {
+      state.liveMessageCount = 0;
+    },
     resetNotifications: () => initialState,
   },
 });
@@ -96,6 +106,7 @@ const notificationsSlice = createSlice({
 export const {
   listStarted, listSucceeded, listFailed, unreadCountSet,
   notificationReceived, notificationRead, allRead, resetNotifications,
+  liveMessageArrived, liveMessagesCleared,
 } = notificationsSlice.actions;
 
 export default notificationsSlice.reducer;
