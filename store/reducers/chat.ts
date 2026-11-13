@@ -85,7 +85,19 @@ const chatSlice = createSlice({
       if (!message || !chatId) return;
       const chat = state.chats[chatId];
       if (!chat) return;
+      // A reconnect catch-up can deliver the same message twice: count it once
+      if (message.id && chat.messages.some((m) => m.id === message.id)) return;
       chat.unread_count = (chat.unread_count || 0) + 1;
+      chat.messages.push(message as ChatMessage);
+    },
+    // A message arriving in the conversation that is on screen: it is read as it lands,
+    // so it is added without touching the unread count.
+    appendMessageToChat: (state, action: PayloadAction<UpdateMessage>) => {
+      const { message, chatId } = action.payload;
+      if (!message || !chatId) return;
+      const chat = state.chats[chatId];
+      if (!chat) return;
+      if (message.id && chat.messages.some((m) => m.id === message.id)) return;
       chat.messages.push(message as ChatMessage);
     },
     setPagination: (state, action: PayloadAction<ChatState['pagination']>) => {
@@ -177,7 +189,16 @@ const chatSlice = createSlice({
       if (action.payload) state.message = action.payload;
     },
     setChats: (state, action: PayloadAction<Record<string, Chat>>) => {
-      state.chats = action.payload;
+      // The conversation list endpoint deliberately returns `messages: []` (history comes from the
+      // history endpoint). Replacing chats wholesale therefore wiped the history of an open chat and
+      // showed "No messages yet". Keep what is already loaded; everything else (unread count, last
+      // message, participants...) still comes from the server.
+      const next: Record<string, Chat> = {};
+      for (const [id, incoming] of Object.entries(action.payload)) {
+        const loaded = state.chats[id]?.messages;
+        next[id] = !incoming.messages?.length && loaded?.length ? { ...incoming, messages: loaded } : incoming;
+      }
+      state.chats = next;
     },
     setMention: (state, action: PayloadAction<MentionPopover>) => {
       state.mention = action.payload;
@@ -243,6 +264,7 @@ const chatSlice = createSlice({
 
 export const {
   pushReceivedMessageToChat,
+  appendMessageToChat,
   pushToActiveChatMessages,
   setSuggestedTeamMembers,
   updateActiveChatMessage,

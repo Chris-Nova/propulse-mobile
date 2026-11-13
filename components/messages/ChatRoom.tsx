@@ -153,10 +153,15 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
 
   const [booting, setBooting] = useState(true);
   const [failed, setFailed] = useState(false);
+  // True once the server has answered with this chat's history (even an empty one). Until then we
+  // show a spinner, never "No messages yet".
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const firstLoadDone = useRef(false);
 
   const load = useCallback(async () => {
     setFailed(false);
     setBooting(true);
+    setHistoryLoaded(false);
     dispatch(setActiveChatId(chatId));
     // Opened from a notification or a cold start: the conversation list may not be loaded yet
     if (!store.getState().chat.chats[chatId]) {
@@ -169,22 +174,34 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
     }
     const ok = await dispatch(fetchMessages(chatId) as any);
     if (ok === false) setFailed(true);
+    else setHistoryLoaded(true);
     setBooting(false);
+    firstLoadDone.current = true;
   }, [chatId, dispatch]);
 
   useEffect(() => {
+    firstLoadDone.current = false;
     if (chatId) load();
     return () => {
       dispatch(resetMessage());
     };
   }, [chatId]);
 
-  // Tell the socket which conversation is on screen, so it can be refreshed after a reconnect
+  // This conversation is "open" only while its screen is in front. Incoming messages are treated
+  // as read only then (and a reconnect refreshes only this one); once you leave, the next message
+  // counts as unread. Leaving a chat must clear the active id, or its badge never appears again.
   useFocusEffect(
     useCallback(() => {
       setViewingChat(chatId);
-      return () => setViewingChat(null);
-    }, [chatId])
+      dispatch(setActiveChatId(chatId));
+      // Coming back to this chat: re-read its history, so anything missed while it was in the
+      // background (or any state that got cleared) is restored. The first visit is load()'s job.
+      if (firstLoadDone.current) dispatch(fetchMessages(chatId) as any);
+      return () => {
+        setViewingChat(null);
+        dispatch(setActiveChatId(undefined));
+      };
+    }, [chatId, dispatch])
   );
 
   // Team members are only needed to show the other person's role in a direct message
@@ -372,7 +389,7 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
   // ── Body ──
   const hasMessages = (chat?.messages?.length ?? 0) > 0;
   const showError = failed && !hasMessages;
-  const showSpinner = !showError && booting && !hasMessages;
+  const showSpinner = !showError && (booting || !historyLoaded) && !hasMessages;
   const canSend = !!message.text?.trim() && !sending;
 
   let body: React.ReactNode;

@@ -1,6 +1,7 @@
 import { TokenStorage } from './storage';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.propulse.app';
+// Set EXPO_PUBLIC_API_URL in .env; the fallback is the production API (the backend's allowed host)
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.getpropulse.app';
 
 export interface FetchPayload {
   contentType?: string;

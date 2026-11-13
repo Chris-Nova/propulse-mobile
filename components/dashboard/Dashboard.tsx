@@ -1,15 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, Image, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchProjects } from '@/store/slices/projects';
-import { fetchChats } from '@/store/slices/chat';
+import { fetchChats, refreshChatsIfStale } from '@/store/slices/chat';
 import { fetchAnalytics } from '@/store/slices/teams';
 import { Activity, fetchRecentActivities } from './activities';
 import { setActiveChartMonthIndex } from '@/store/reducers/misc';
@@ -121,6 +121,9 @@ export const Dashboard = () => {
   }, [dispatch]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Back on Home: bring the Messages badge up to date (skipped if just loaded above)
+  useFocusEffect(useCallback(() => { dispatch(refreshChatsIfStale() as any); }, [dispatch]));
 
   const onRefresh = async () => {
     setRefreshing(true);

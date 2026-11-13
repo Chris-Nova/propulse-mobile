@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchChats, deleteChat } from '@/store/slices/chat';
+import { fetchChats, deleteChat, refreshChatsIfStale } from '@/store/slices/chat';
 import { setActiveChatId } from '@/store/reducers/chat';
 import { Chat, ChatFilters } from '@/types';
 import { ThemedStatusBar } from '@/components/shared/ThemedStatusBar';
@@ -42,6 +42,13 @@ export const ChatList = () => {
   useEffect(() => {
     loadChats();
   }, []);
+
+  // Coming back to this tab: refresh unread badges (skipped if the list was just loaded)
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(refreshChatsIfStale() as any);
+    }, [dispatch])
+  );
 
   const getOtherParticipant = (chat: Chat) =>
     chat.participants?.find((p) => p.id !== user?.id) ?? chat.participants?.[0];

@@ -2,7 +2,7 @@ import { notificationReceived } from '@/store/reducers/notifications';
 import { playNotificationSound } from '@/utils/notificationSound';
 import { fetchUnreadCount } from '@/store/slices/notifications';
 import { AppDispatch, store } from '@/store';
-import { Fetch } from '@/utils/api';
+import { Fetch, API_URL } from '@/utils/api';
 import { TokenStorage } from '@/utils/storage';
 import { startAsyncAction, endAsyncAction } from '@/store/reducers/asyncActions';
 import { showFeedback } from '@/store/reducers/feedback';
@@ -10,6 +10,7 @@ import {
   setChats,
   updateChats,
   setActiveChatId,
+  appendMessageToChat,
   pushToActiveChatMessages,
   pushReceivedMessageToChat,
   updateMessageByTempId,
@@ -26,7 +27,6 @@ import {
 } from '@/store/reducers/chat';
 import { Chat, ChatMessage, ChatFilters, Mention } from '@/types';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://api.propulse.app';
 const WS_URL = API_URL.replace('https', 'wss').replace('http', 'ws');
 
 // ─── Socket lifecycle ─────────────────────────────────────
@@ -120,9 +120,12 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
     }
 
     if (event_type === 'message_received') {
-      const { activeChatId } = store.getState().chat;
-      if (activeChatId === chatId) {
-        dispatch(pushToActiveChatMessages(message));
+      // `viewingChatId` is set only while that conversation is on screen (see ChatRoom). It used to
+      // be the "active chat" id, which was never cleared on leaving a chat, so the last chat you
+      // opened silently swallowed its unread badge.
+      if (viewingChatId === chatId) {
+        dispatch(appendMessageToChat({ message, chatId }));
+        dispatch(markConversationAsRead(chatId) as any); // keep the server's unread count in step
       } else {
         dispatch(pushReceivedMessageToChat({ message, chatId }));
       }
@@ -152,11 +155,14 @@ const openSocket = async (dispatch: AppDispatch) => {
     ws.onopen = () => {
       attempt = 0;
       if (hasConnected) {
-        // We were away (offline or in the background): catch up on whatever was missed
-        const { activeChatsFilter } = store.getState().chat;
-        dispatch(fetchChats((activeChatsFilter ?? ChatFilters.ALL) as ChatFilters) as any);
-        dispatch(fetchUnreadCount(true) as any);
-        if (viewingChatId) dispatch(fetchMessages(viewingChatId) as any);
+        // We were away (offline or in the background): catch up on whatever was missed. In order:
+        // the list first, then the open chat's history, so neither overwrites the other.
+        (async () => {
+          const { activeChatsFilter } = store.getState().chat;
+          await dispatch(fetchChats((activeChatsFilter ?? ChatFilters.ALL) as ChatFilters) as any);
+          dispatch(fetchUnreadCount(true) as any);
+          if (viewingChatId) await dispatch(fetchMessages(viewingChatId) as any);
+        })();
       }
       hasConnected = true;
     };
@@ -198,7 +204,19 @@ export const disconnectSocket = () => () => {
   }
 };
 
+let lastChatsFetch = 0;
+
+// Re-reads the conversation list (with the filter you are on) unless it was read moments ago.
+// Screens call this when they come back into view, so unread badges are right even if a live
+// event was missed.
+export const refreshChatsIfStale = () => async (dispatch: AppDispatch) => {
+  if (Date.now() - lastChatsFetch < 10000) return;
+  const filter = (store.getState().chat.activeChatsFilter ?? ChatFilters.ALL) as ChatFilters;
+  await dispatch(fetchChats(filter) as any);
+};
+
 export const fetchChats = (filter: ChatFilters = ChatFilters.ALL) => async (dispatch: AppDispatch) => {
+  lastChatsFetch = Date.now();
   dispatch(startAsyncAction('fetchChats'));
 
   // The backend's list_conversations endpoint returns the full set for the
@@ -211,6 +229,11 @@ export const fetchChats = (filter: ChatFilters = ChatFilters.ALL) => async (disp
 
   const chats: Record<string, Chat> = {};
   for (const chat of data.conversations as Chat[]) chats[chat.id] = chat;
+
+  // A filter (e.g. Unread) can exclude the conversation you are reading right now. Keep it, so the
+  // open chat doesn't vanish from under you.
+  const open = viewingChatId ? store.getState().chat.chats[viewingChatId] : undefined;
+  if (viewingChatId && open && !chats[viewingChatId]) chats[viewingChatId] = open;
 
   dispatch(setActiveChatsFilter(data.filter ?? filter));
   dispatch(setChatsCount(data.count ?? data.conversations.length));
