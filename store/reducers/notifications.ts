@@ -13,12 +13,38 @@ export interface AppNotification {
   created_at: string;
 }
 
+// A message that arrived live while the person was outside Messages, grouped per conversation.
+// Client-only: the server's own message notification is a digest created after a delay.
+export interface LiveMessageAlert {
+  conversation_id: string;
+  sender_name: string;
+  room_name?: string;
+  text: string;
+  count: number;
+  created_at: string;
+}
+
+// Shaped like a server notification so the list can render it with the same row.
+export const liveAlertToNotification = (a: LiveMessageAlert): AppNotification => ({
+  id: `live-${a.conversation_id}`,
+  actor_id: null,
+  category: 'messages',
+  event_type: 'message.live',
+  title: a.room_name
+    ? (a.count > 1 ? `${a.count} new messages in ${a.room_name}` : `New message in ${a.room_name}`)
+    : (a.count > 1 ? `${a.count} new messages from ${a.sender_name}` : `New message from ${a.sender_name}`),
+  body: a.room_name ? `${a.sender_name}: ${a.text}` : a.text,
+  metadata: { conversation_id: a.conversation_id },
+  is_read: false,
+  created_at: a.created_at,
+});
+
 interface NotificationsState {
   items: AppNotification[];
   unreadCount: number;
-  // Messages that arrived live while the person was outside the Messages section. Client-only: the
-  // server's notification for a message is a delayed digest, so this is what lights the bell now.
-  liveMessageCount: number;
+  // Messages that arrived live while the person was outside the Messages section. This is what
+  // lights the bell now and what the list shows until the server's delayed digest takes over.
+  liveMessages: LiveMessageAlert[];
   page: number;
   hasMore: boolean;
   loading: boolean;
@@ -29,7 +55,7 @@ interface NotificationsState {
 const initialState: NotificationsState = {
   items: [],
   unreadCount: 0,
-  liveMessageCount: 0,
+  liveMessages: [],
   page: 0,
   hasMore: false,
   loading: false,
@@ -92,12 +118,19 @@ const notificationsSlice = createSlice({
         n.is_read = true;
       });
       state.unreadCount = 0;
+      state.liveMessages = [];
     },
-    liveMessageArrived: (state) => {
-      state.liveMessageCount += 1;
+    liveMessageArrived: (state, action: PayloadAction<Omit<LiveMessageAlert, 'count'>>) => {
+      const incoming = action.payload;
+      const existing = state.liveMessages.find((a) => a.conversation_id === incoming.conversation_id);
+      const next: LiveMessageAlert = { ...incoming, count: (existing?.count ?? 0) + 1 };
+      state.liveMessages = [next, ...state.liveMessages.filter((a) => a.conversation_id !== incoming.conversation_id)];
+    },
+    liveMessagesClearedFor: (state, action: PayloadAction<string[]>) => {
+      state.liveMessages = state.liveMessages.filter((a) => !action.payload.includes(a.conversation_id));
     },
     liveMessagesCleared: (state) => {
-      state.liveMessageCount = 0;
+      state.liveMessages = [];
     },
     resetNotifications: () => initialState,
   },
@@ -106,7 +139,7 @@ const notificationsSlice = createSlice({
 export const {
   listStarted, listSucceeded, listFailed, unreadCountSet,
   notificationReceived, notificationRead, allRead, resetNotifications,
-  liveMessageArrived, liveMessagesCleared,
+  liveMessageArrived, liveMessagesCleared, liveMessagesClearedFor,
 } = notificationsSlice.actions;
 
 export default notificationsSlice.reducer;

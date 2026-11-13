@@ -1,4 +1,6 @@
-import { notificationReceived, liveMessageArrived, AppNotification } from '@/store/reducers/notifications';
+import {
+  notificationReceived, liveMessageArrived, liveMessagesClearedFor, AppNotification,
+} from '@/store/reducers/notifications';
 import { playNotificationSound } from '@/utils/notificationSound';
 import { fetchUnreadCount } from '@/store/slices/notifications';
 import { AppDispatch, store } from '@/store';
@@ -93,6 +95,11 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
       // The server re-sends a message digest when it grows; only a first-time unread one is "new"
       const alreadyUnread = store.getState().notifications.items.some((i) => i.id === incoming.id && !i.is_read);
       dispatch(notificationReceived(incoming));
+      if (incoming.category === 'messages') {
+        const m = incoming.metadata ?? {};
+        const ids: string[] = [m.conversation_id, ...(Array.isArray(m.conversation_ids) ? m.conversation_ids : [])].filter(Boolean);
+        if (ids.length) dispatch(liveMessagesClearedFor(ids));
+      }
       if (!incoming.is_read && !alreadyUnread) playNotificationSound(incoming, viewingChatId);
     }
     return;
@@ -132,7 +139,16 @@ const handleSocketEvent = (event: any) => async (dispatch: AppDispatch) => {
     if (!mine && !insideMessages && !alertedMessageIds.has(message.id)) {
       alertedMessageIds.add(message.id);
       if (alertedMessageIds.size > 200) alertedMessageIds.clear();
-      dispatch(liveMessageArrived());
+      const s = message.sender ?? {};
+      const senderName = `${s.first_name ?? ''} ${s.last_name ?? ''}`.trim() || s.email || 'Someone';
+      dispatch(liveMessageArrived({
+        conversation_id: chatId,
+        sender_name: senderName,
+        room_name: chats[chatId]?.room?.name,
+        text: message.text?.trim()
+          || (message.voice_note ? 'Sent a voice note' : message.files?.length ? 'Sent an attachment' : 'New message'),
+        created_at: message.created_at ?? new Date().toISOString(),
+      }));
       playNotificationSound(
         { id: `live-${message.id}`, category: 'messages', event_type: 'message.received', is_read: false } as AppNotification,
         viewingChatId

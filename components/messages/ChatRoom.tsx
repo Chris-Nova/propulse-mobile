@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { store } from '@/store';
+import { liveMessagesClearedFor } from '@/store/reducers/notifications';
 import {
   fetchChats, fetchMessages, sendMessage, deleteMessage, editMessage, deleteChat, setViewingChat,
 } from '@/store/slices/chat';
@@ -194,6 +195,7 @@ export const ChatRoom = ({ chatId }: { chatId: string }) => {
   useFocusEffect(
     useCallback(() => {
       setViewingChat(chatId);
+      dispatch(liveMessagesClearedFor([chatId])); // its bell alert is resolved once you are in it
       dispatch(setActiveChatId(chatId));
       // Coming back to this chat: re-read its history, so anything missed while it was in the
       // background (or any state that got cleared) is restored. The first visit is load()'s job.

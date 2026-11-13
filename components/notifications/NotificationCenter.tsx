@@ -6,7 +6,9 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { AppNotification, liveMessagesCleared } from '@/store/reducers/notifications';
+import {
+  AppNotification, liveAlertToNotification, liveMessagesClearedFor,
+} from '@/store/reducers/notifications';
 import {
   fetchNotifications, fetchUnreadCount, markNotificationRead,
 } from '@/store/slices/notifications';
@@ -44,13 +46,17 @@ export const NotificationCenter = () => {
   const insets = useSafeAreaInsets();
   const { openMenu } = useMenu();
   const { theme } = useSettingsTheme();
-  const { items, loading, loaded, hasMore, page, error } = useAppSelector((s) => s.notifications);
+  const { items: serverItems, liveMessages, loading, loaded, hasMore, page, error } = useAppSelector((s) => s.notifications);
+  // Messages that just arrived come first; the server's list follows
+  const items = React.useMemo(
+    () => [...liveMessages.map(liveAlertToNotification), ...serverItems],
+    [liveMessages, serverItems]
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   // Load (and re-load) whenever the screen is shown
   useFocusEffect(
     useCallback(() => {
-      dispatch(liveMessagesCleared());
       dispatch(fetchNotifications(1) as any);
       dispatch(fetchUnreadCount(true) as any);
     }, [dispatch])
@@ -70,7 +76,8 @@ export const NotificationCenter = () => {
   };
 
   const open = (n: AppNotification) => {
-    if (!n.is_read) dispatch(markNotificationRead(n.id) as any);
+    if (n.id.startsWith('live-')) dispatch(liveMessagesClearedFor([n.metadata.conversation_id]));
+    else if (!n.is_read) dispatch(markNotificationRead(n.id) as any);
     const target = targetFor(n);
     if (target) router.push(target as any);
   };

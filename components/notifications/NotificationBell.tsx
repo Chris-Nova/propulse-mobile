@@ -15,7 +15,7 @@ export const NotificationBell = ({ onPress }: { onPress?: () => void }) => {
   const dispatch = useAppDispatch();
   const theme = useDashboardTheme();
   const unreadNotifications = useAppSelector((s) => s.notifications.unreadCount);
-  const liveMessages = useAppSelector((s) => s.notifications.liveMessageCount);
+  const liveMessages = useAppSelector((s) => s.notifications.liveMessages.length);
   const unread = unreadNotifications + liveMessages;
 
   // Re-check whenever the screen comes into view (throttled inside the thunk)
